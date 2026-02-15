@@ -19,10 +19,6 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { PlayIcon, PauseIcon } from './Icons';
-import { useServerTime } from './useServerTime';
-import { useWiFiAttendance } from './useWiFiAttendance';
-import WiFiStatusIndicator from './WiFiStatusIndicator';
-import OfflineAttendanceManager from './OfflineAttendanceManager';
 
 // Constants for circle dimensions
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -82,20 +78,19 @@ export default function CircularTimer({
   const [isDragging, setIsDragging] = useState(false);
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [circleScale, setCircleScale] = useState(new Animated.Value(0));
-  const currentTime = useServerTime(1000); // Use server time hook
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // WiFi-based attendance tracking
-  const {
-    wifiStatus,
-    timerState,
-    startTimer: startWiFiTimer,
-    stopTimer: stopWiFiTimer,
-    getStatusMessage,
-    refreshWiFiStatus,
-    canStartTimer,
-    shouldPauseTimer,
-    isInValidLocation
-  } = useWiFiAttendance(serverUrl, lectureInfo, studentId);
+  // Update current time every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // WiFi-based attendance tracking (simplified)
+  const [wifiStatus, setWifiStatus] = useState('disconnected');
+  const [canStartTimer, setCanStartTimer] = useState(true);
 
   // Simplified animations to prevent crashes
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -329,23 +324,7 @@ export default function CircularTimer({
     }
   }, [isRunning]);
 
-  // Current time is now managed by useServerTime hook - no need for manual updates
-
-  // WiFi-based timer control
-  useEffect(() => {
-    // Auto-pause timer if WiFi becomes invalid
-    if (shouldPauseTimer && isRunning) {
-      console.log('⏸️ Auto-pausing timer due to WiFi status');
-      onTimerPaused(timerState.pauseReason || 'wifi_invalid');
-    }
-  }, [shouldPauseTimer, isRunning, timerState.pauseReason]);
-
-  // Notify parent of WiFi timer state changes
-  useEffect(() => {
-    if (timerState.isPaused && isRunning) {
-      onTimerPaused(timerState.pauseReason);
-    }
-  }, [timerState.isPaused, timerState.pauseReason]);
+  // Current time is now managed by state - updates every second
 
   // Simplified segment animation to prevent crashes
   // Removed complex morphing animations that cause crashes

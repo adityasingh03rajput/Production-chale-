@@ -385,9 +385,6 @@ class ServerTime {
 let serverTimeInstance = null;
 
 export const initializeServerTime = (socketUrl) => {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ServerTime.js:initializeServerTime',message:'initializeServerTime called',data:{hasInstance:!!serverTimeInstance},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   if (!serverTimeInstance) {
     serverTimeInstance = new ServerTime(socketUrl);
   }
@@ -395,9 +392,6 @@ export const initializeServerTime = (socketUrl) => {
 };
 
 export const getServerTime = () => {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ServerTime.js:getServerTime',message:'getServerTime called',data:{hasInstance:!!serverTimeInstance},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   if (!serverTimeInstance) {
     throw new Error('ServerTime not initialized. Call initializeServerTime first.');
   }

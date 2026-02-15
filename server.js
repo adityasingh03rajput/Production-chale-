@@ -54,8 +54,8 @@ const app = express();
 const server = http.createServer(app);
 
 // CORS Configuration - Restrict in production
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
     : ['http://localhost:3000', 'http://localhost:8081'];
 
 const io = new Server(server, {
@@ -153,7 +153,7 @@ mongoose.connect(MONGO_URI, {
 }).then(() => {
     console.log('✅ Connected to MongoDB Atlas');
     console.log('📍 Database:', mongoose.connection.name);
-    
+
     // Create indexes for better performance
     createDatabaseIndexes();
 }).catch(err => {
@@ -165,34 +165,34 @@ mongoose.connect(MONGO_URI, {
 async function createDatabaseIndexes() {
     try {
         console.log('📊 Creating database indexes...');
-        
+
         // StudentManagement indexes
         await StudentManagement.collection.createIndex({ enrollmentNo: 1 }, { unique: true });
         await StudentManagement.collection.createIndex({ email: 1 });
         await StudentManagement.collection.createIndex({ semester: 1, course: 1 });
         await StudentManagement.collection.createIndex({ isRunning: 1 });
-        
+
         // AttendanceSession indexes
         await AttendanceSession.collection.createIndex({ studentId: 1, date: -1 });
         await AttendanceSession.collection.createIndex({ date: -1, isActive: 1 });
-        
+
         // AttendanceRecord indexes
         await AttendanceRecord.collection.createIndex({ enrollmentNo: 1, date: -1 });
         await AttendanceRecord.collection.createIndex({ date: -1 });
         await AttendanceRecord.collection.createIndex({ semester: 1, branch: 1, date: -1 });
         await AttendanceRecord.collection.createIndex({ 'lectures.teacher': 1, date: -1 });
-        
+
         // Timetable indexes
         await Timetable.collection.createIndex({ semester: 1, branch: 1 }, { unique: true });
-        
+
         // Teacher indexes
         await Teacher.collection.createIndex({ employeeId: 1 }, { unique: true });
         await Teacher.collection.createIndex({ email: 1 });
-        
+
         // Classroom indexes
         await Classroom.collection.createIndex({ roomNumber: 1 }, { unique: true });
         await Classroom.collection.createIndex({ wifiBSSID: 1 });
-        
+
         console.log('✅ Database indexes created successfully');
     } catch (error) {
         console.error('⚠️  Error creating indexes:', error.message);
@@ -3190,7 +3190,7 @@ app.get('/api/config/branches', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
             const branches = await getBranchesFromConfig();
-            
+
             res.json({
                 success: true,
                 branches: branches,
@@ -3217,7 +3217,7 @@ app.get('/api/config/semesters', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
             const semesters = await getSemestersFromConfig();
-            
+
             res.json({
                 success: true,
                 semesters: semesters,
@@ -3241,18 +3241,18 @@ app.get('/api/config/semesters', async (req, res) => {
 app.post('/api/config/branches', async (req, res) => {
     try {
         const { value, displayName } = req.body;
-        
+
         if (!value) {
             return res.status(400).json({ success: false, error: 'Branch value is required' });
         }
-        
+
         const newBranch = await Config.create({
             type: 'branch',
             value: value.trim(),
             displayName: displayName?.trim() || value.trim(),
             isActive: true
         });
-        
+
         res.json({ success: true, branch: newBranch });
     } catch (error) {
         if (error.code === 11000) {
@@ -3267,10 +3267,10 @@ app.post('/api/config/branches', async (req, res) => {
 app.put('/api/config/branches/:id', async (req, res) => {
     try {
         const { value, displayName, isActive } = req.body;
-        
+
         const updated = await Config.findByIdAndUpdate(
             req.params.id,
-            { 
+            {
                 value: value?.trim(),
                 displayName: displayName?.trim(),
                 isActive,
@@ -3278,11 +3278,11 @@ app.put('/api/config/branches/:id', async (req, res) => {
             },
             { new: true, runValidators: true }
         );
-        
+
         if (!updated) {
             return res.status(404).json({ success: false, error: 'Branch not found' });
         }
-        
+
         res.json({ success: true, branch: updated });
     } catch (error) {
         console.error('Error updating branch:', error);
@@ -3294,19 +3294,22 @@ app.put('/api/config/branches/:id', async (req, res) => {
 app.delete('/api/config/branches/:identifier', async (req, res) => {
     try {
         const identifier = req.params.identifier;
-        
+
         // Try to delete by _id first, then by value
-        let deleted = await Config.findByIdAndDelete(identifier);
-        
+        let deleted = null;
+        if (mongoose.Types.ObjectId.isValid(identifier)) {
+            deleted = await Config.findByIdAndDelete(identifier);
+        }
+
         if (!deleted) {
             // Try finding by value
             deleted = await Config.findOneAndDelete({ type: 'branch', value: identifier });
         }
-        
+
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Branch not found' });
         }
-        
+
         res.json({ success: true, message: 'Branch deleted successfully' });
     } catch (error) {
         console.error('Error deleting branch:', error);
@@ -3318,18 +3321,18 @@ app.delete('/api/config/branches/:identifier', async (req, res) => {
 app.post('/api/config/semesters', async (req, res) => {
     try {
         const { value } = req.body;
-        
+
         if (!value) {
             return res.status(400).json({ success: false, error: 'Semester value is required' });
         }
-        
+
         const newSemester = await Config.create({
             type: 'semester',
             value: value.toString().trim(),
             displayName: `Semester ${value}`,
             isActive: true
         });
-        
+
         res.json({ success: true, semester: newSemester });
     } catch (error) {
         if (error.code === 11000) {
@@ -3344,22 +3347,133 @@ app.post('/api/config/semesters', async (req, res) => {
 app.delete('/api/config/semesters/:identifier', async (req, res) => {
     try {
         const identifier = req.params.identifier;
-        
+
         // Try to delete by _id first, then by value
-        let deleted = await Config.findByIdAndDelete(identifier);
-        
+        let deleted = null;
+        if (mongoose.Types.ObjectId.isValid(identifier)) {
+            deleted = await Config.findByIdAndDelete(identifier);
+        }
+
         if (!deleted) {
             // Try finding by value
             deleted = await Config.findOneAndDelete({ type: 'semester', value: identifier });
         }
-        
+
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Semester not found' });
         }
-        
+
         res.json({ success: true, message: 'Semester deleted successfully' });
     } catch (error) {
         console.error('Error deleting semester:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get available departments (dynamic)
+app.get('/api/config/departments', async (req, res) => {
+    try {
+        if (mongoose.connection.readyState === 1) {
+            const departments = await getDepartmentsFromConfig();
+
+            res.json({
+                success: true,
+                departments: departments,
+                count: departments.length
+            });
+        } else {
+            // Fallback to default departments
+            res.json({
+                success: true,
+                departments: [
+                    { code: 'CSE', name: 'Computer Science', value: 'CSE' },
+                    { code: 'ECE', name: 'Electronics', value: 'ECE' }
+                ],
+                count: 2
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching departments:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Add new department
+app.post('/api/config/departments', async (req, res) => {
+    try {
+        const { value, displayName } = req.body;
+
+        if (!value) {
+            return res.status(400).json({ success: false, error: 'Department value is required' });
+        }
+
+        const newDepartment = await Config.create({
+            type: 'department',
+            value: value.trim(),
+            displayName: displayName?.trim() || value.trim(),
+            isActive: true
+        });
+
+        res.json({ success: true, department: newDepartment });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, error: 'Department already exists' });
+        }
+        console.error('Error adding department:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Update department
+app.put('/api/config/departments/:id', async (req, res) => {
+    try {
+        const { value, displayName, isActive } = req.body;
+
+        const updated = await Config.findByIdAndUpdate(
+            req.params.id,
+            {
+                value: value?.trim(),
+                displayName: displayName?.trim(),
+                isActive,
+                updatedAt: Date.now()
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!updated) {
+            return res.status(404).json({ success: false, error: 'Department not found' });
+        }
+
+        res.json({ success: true, department: updated });
+    } catch (error) {
+        console.error('Error updating department:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete department
+app.delete('/api/config/departments/:identifier', async (req, res) => {
+    try {
+        const identifier = req.params.identifier;
+
+        // Try to delete by _id first, then by value
+        let deleted = null;
+        if (mongoose.Types.ObjectId.isValid(identifier)) {
+            deleted = await Config.findByIdAndDelete(identifier);
+        }
+
+        if (!deleted) {
+            // Try finding by value
+            deleted = await Config.findOneAndDelete({ type: 'department', value: identifier });
+        }
+
+        if (!deleted) {
+            return res.status(404).json({ success: false, error: 'Department not found' });
+        }
+
+        res.json({ success: true, message: 'Department deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting department:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -3474,7 +3588,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
 
             if (user) {
                 // Check if password is hashed (starts with $2b$ for bcrypt)
-                const isPasswordValid = user.password.startsWith('$2b$') 
+                const isPasswordValid = user.password.startsWith('$2b$')
                     ? await bcrypt.compare(password, user.password)
                     : user.password === password; // Fallback for legacy plain text passwords
 
@@ -4837,21 +4951,21 @@ app.post('/api/attendance/sync-offline', async (req, res) => {
         // CRITICAL: Check for failed random ring during offline period
         let acceptedSeconds = totalOfflineSeconds;
         let rejectionReason = null;
-        
+
         const session = student.attendanceSession;
         if (session && session.randomRingPassed === false) {
             // Random ring FAILED - apply timer cutoff
             const randomRingTime = new Date(session.randomRingTime).getTime();
             const offlineStart = new Date(offlineStartTime).getTime();
             const offlineEnd = new Date(offlineEndTime).getTime();
-            
+
             // If offline period includes or is after failed random ring
             if (offlineEnd > randomRingTime && randomRingTime >= offlineStart) {
                 // Only count time until random ring
                 const timeUntilRandomRing = Math.floor((randomRingTime - offlineStart) / 1000);
                 acceptedSeconds = Math.max(0, timeUntilRandomRing);
                 rejectionReason = 'random_ring_failed_cutoff';
-                
+
                 console.log(`❌ Random ring cutoff applied for ${studentName}:`);
                 console.log(`   Random ring time: ${new Date(randomRingTime).toISOString()}`);
                 console.log(`   Offline start: ${new Date(offlineStart).toISOString()}`);
@@ -4862,7 +4976,7 @@ app.post('/api/attendance/sync-offline', async (req, res) => {
                 // Entire offline period is after failed random ring - reject all
                 acceptedSeconds = 0;
                 rejectionReason = 'random_ring_failed_all_rejected';
-                
+
                 console.log(`❌ All offline time rejected - after failed random ring`);
             }
         }
@@ -5144,9 +5258,9 @@ async function loadAttendanceThreshold() {
 // Call on server start
 loadAttendanceThreshold();
 
-// Config Schema - Store branches and semesters
+// Config Schema - Store branches, semesters, and departments
 const configSchema = new mongoose.Schema({
-    type: { type: String, required: true, enum: ['branch', 'semester'] },
+    type: { type: String, required: true, enum: ['branch', 'semester', 'department'] },
     value: { type: String, required: true },
     displayName: { type: String },
     isActive: { type: Boolean, default: true },
@@ -5162,7 +5276,7 @@ const Config = mongoose.model('Config', configSchema);
 async function getBranchesFromConfig() {
     try {
         const configBranches = await Config.find({ type: 'branch', isActive: true }).sort({ value: 1 });
-        
+
         if (configBranches.length > 0) {
             return configBranches.map(branch => ({
                 id: branch.value.toLowerCase().replace(/\s+/g, '-'),
@@ -5171,7 +5285,7 @@ async function getBranchesFromConfig() {
                 value: branch.value
             }));
         }
-        
+
         // Fallback: Get unique branches from StudentManagement collection
         const branches = await StudentManagement.distinct('course');
         return branches.map(branch => ({
@@ -5189,17 +5303,47 @@ async function getBranchesFromConfig() {
 async function getSemestersFromConfig() {
     try {
         const configSemesters = await Config.find({ type: 'semester', isActive: true }).sort({ value: 1 });
-        
+
         if (configSemesters.length > 0) {
             return configSemesters.map(sem => sem.value);
         }
-        
+
         // Fallback: Get unique semesters from StudentManagement collection
         const semesters = await StudentManagement.distinct('semester');
         return semesters.sort((a, b) => parseInt(a) - parseInt(b));
     } catch (error) {
         console.error('Error getting semesters:', error);
         return ['1', '2', '3', '4', '5', '6', '7', '8'];
+    }
+}
+
+async function getDepartmentsFromConfig() {
+    try {
+        const configDepartments = await Config.find({ type: 'department', isActive: true }).sort({ value: 1 });
+
+        if (configDepartments.length > 0) {
+            return configDepartments.map(dept => ({
+                code: dept.value,
+                name: dept.displayName || dept.value,
+                value: dept.value
+            }));
+        }
+
+        // Fallback: Get unique departments from Teacher collection
+        const departments = await Teacher.distinct('department');
+        return departments.filter(d => d).map(dept => ({
+            code: dept,
+            name: dept,
+            value: dept
+        }));
+    } catch (error) {
+        console.error('Error getting departments:', error);
+        return [
+            { code: 'CSE', name: 'Computer Science', value: 'CSE' },
+            { code: 'ECE', name: 'Electronics', value: 'ECE' },
+            { code: 'ME', name: 'Mechanical', value: 'ME' },
+            { code: 'CE', name: 'Civil', value: 'CE' }
+        ];
     }
 }
 
@@ -5891,7 +6035,7 @@ app.post('/api/random-ring', async (req, res) => {
         // Create random ring record in database
         let randomRingId = null;
         const randomRingTimestamp = new Date();
-        
+
         if (mongoose.connection.readyState === 1) {
             const randomRing = new RandomRing({
                 teacherId,
@@ -5927,7 +6071,7 @@ app.post('/api/random-ring', async (req, res) => {
                 // Calculate current attended time
                 const session = student.attendanceSession;
                 let currentAttendedSeconds = 0;
-                
+
                 if (session && session.sessionStartTime) {
                     const sessionStart = new Date(session.sessionStartTime).getTime();
                     const sessionDuration = Math.floor((randomRingTimestamp.getTime() - sessionStart) / 1000);
@@ -6372,13 +6516,13 @@ process.on('unhandledRejection', (reason, promise) => {
 // Graceful shutdown handler
 async function gracefulShutdown(signal) {
     console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
-    
+
     try {
         // Stop accepting new connections
         server.close(() => {
             console.log('✅ HTTP server closed');
         });
-        
+
         // Close all socket connections
         console.log(`🔌 Closing ${activeConnections.size} active socket connections...`);
         activeConnections.forEach((connection, socketId) => {
@@ -6387,13 +6531,13 @@ async function gracefulShutdown(signal) {
         io.close(() => {
             console.log('✅ Socket.IO server closed');
         });
-        
+
         // Close database connection
         if (mongoose.connection.readyState === 1) {
             await mongoose.connection.close();
             console.log('✅ MongoDB connection closed');
         }
-        
+
         console.log('✅ Graceful shutdown completed');
         process.exit(0);
     } catch (error) {

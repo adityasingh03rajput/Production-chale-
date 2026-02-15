@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
     setupEventListeners();
     checkServerConnection();
-    
+
     // Load dynamic data from server
     loadDynamicDropdownData();
 
@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load dynamic dropdown data from server
 async function loadDynamicDropdownData() {
     console.log('📥 Loading dynamic dropdown data from server...');
-    
+
     try {
         // Fetch branches/courses
         const branchesResponse = await fetch(`${SERVER_URL}/api/config/branches`);
@@ -50,7 +50,7 @@ async function loadDynamicDropdownData() {
                 console.log(`✅ Loaded ${dynamicData.branches.length} branches`);
             }
         }
-        
+
         // Fetch semesters
         const semestersResponse = await fetch(`${SERVER_URL}/api/config/semesters`);
         if (semestersResponse.ok) {
@@ -60,7 +60,7 @@ async function loadDynamicDropdownData() {
                 console.log(`✅ Loaded ${dynamicData.semesters.length} semesters`);
             }
         }
-        
+
         // Extract unique departments from teachers
         const teachersResponse = await fetch(`${SERVER_URL}/api/teachers`);
         if (teachersResponse.ok) {
@@ -74,7 +74,7 @@ async function loadDynamicDropdownData() {
                 console.log(`✅ Loaded ${dynamicData.departments.length} departments`);
             }
         }
-        
+
         // If no data from server, use defaults
         if (dynamicData.branches.length === 0) {
             console.log('⚠️ No branches from server, using defaults');
@@ -86,7 +86,7 @@ async function loadDynamicDropdownData() {
                 { value: 'CE', label: 'Civil' }
             ];
         }
-        
+
         if (dynamicData.departments.length === 0) {
             console.log('⚠️ No departments from server, using defaults');
             dynamicData.departments = [
@@ -96,12 +96,12 @@ async function loadDynamicDropdownData() {
                 { value: 'CE', label: 'Civil' }
             ];
         }
-        
+
         console.log('✅ Dynamic dropdown data loaded');
-        
+
         // Populate filter dropdowns after data is loaded
         populateFilterDropdowns();
-        
+
     } catch (error) {
         console.error('❌ Error loading dynamic data:', error);
         // Use defaults on error
@@ -118,7 +118,7 @@ async function loadDynamicDropdownData() {
             { value: 'ME', label: 'Mechanical' },
             { value: 'CE', label: 'Civil' }
         ];
-        
+
         // Populate filter dropdowns even with defaults
         populateFilterDropdowns();
     }
@@ -126,21 +126,21 @@ async function loadDynamicDropdownData() {
 
 // Helper function to generate branch dropdown options
 function generateBranchOptions(selectedValue = '') {
-    return dynamicData.branches.map(branch => 
+    return dynamicData.branches.map(branch =>
         `<option value="${branch.value}" ${selectedValue === branch.value ? 'selected' : ''}>${branch.label}</option>`
     ).join('');
 }
 
 // Helper function to generate department dropdown options
 function generateDepartmentOptions(selectedValue = '') {
-    return dynamicData.departments.map(dept => 
+    return dynamicData.departments.map(dept =>
         `<option value="${dept.value}" ${selectedValue === dept.value ? 'selected' : ''}>${dept.label}</option>`
     ).join('');
 }
 
 // Helper function to generate semester dropdown options
 function generateSemesterOptions(selectedValue = '') {
-    return dynamicData.semesters.map(sem => 
+    return dynamicData.semesters.map(sem =>
         `<option value="${sem}" ${selectedValue == sem ? 'selected' : ''}>${sem}</option>`
     ).join('');
 }
@@ -148,40 +148,40 @@ function generateSemesterOptions(selectedValue = '') {
 // Populate all filter dropdowns on page load
 function populateFilterDropdowns() {
     console.log('🔄 Populating filter dropdowns...');
-    
+
     // Timetable filters
     const timetableSemester = document.getElementById('timetableSemester');
     if (timetableSemester) {
         timetableSemester.innerHTML = '<option value="">Select Semester</option>' + generateSemesterOptions();
     }
-    
+
     const timetableCourse = document.getElementById('timetableCourse');
     if (timetableCourse) {
         timetableCourse.innerHTML = '<option value="">Select Branch</option>' + generateBranchOptions();
     }
-    
+
     // Attendance filters
     const attendanceCourseFilter = document.getElementById('attendanceCourseFilter');
     if (attendanceCourseFilter) {
         attendanceCourseFilter.innerHTML = '<option value="">-- Select Branch --</option>' + generateBranchOptions();
     }
-    
+
     const attendanceSemesterFilter = document.getElementById('attendanceSemesterFilter');
     if (attendanceSemesterFilter) {
         attendanceSemesterFilter.innerHTML = '<option value="">-- Select Semester --</option>' + generateSemesterOptions();
     }
-    
+
     // Subject filters
     const subjectSemesterFilter = document.getElementById('subjectSemesterFilter');
     if (subjectSemesterFilter) {
         subjectSemesterFilter.innerHTML = '<option value="">All Semesters</option>' + generateSemesterOptions();
     }
-    
+
     const subjectBranchFilter = document.getElementById('subjectBranchFilter');
     if (subjectBranchFilter) {
         subjectBranchFilter.innerHTML = '<option value="">All Branches</option>' + generateBranchOptions();
     }
-    
+
     console.log('✅ Filter dropdowns populated');
 }
 
@@ -955,7 +955,7 @@ function renderTeachers(teachersToRender) {
 // Load departments for teacher filter
 async function loadDepartmentsFilter() {
     try {
-        const response = await fetch(`${SERVER_URL}/api/departments`);
+        const response = await fetch(`${SERVER_URL}/api/config/departments`);
         const data = await response.json();
 
         if (data.success && data.departments) {
@@ -9450,24 +9450,24 @@ async function loadBranchesConfig() {
     try {
         const response = await fetch(`${SERVER_URL}/api/config/branches`);
         const data = await response.json();
-        
+
         const container = document.getElementById('branchesListContainer');
-        
+
         if (!data.success || data.branches.length === 0) {
             container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No branches configured</div>';
             return;
         }
-        
+
         container.innerHTML = data.branches.map(branch => `
             <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
                 <div>
                     <div style="font-weight: 500; color: var(--text-primary);">${branch.displayName}</div>
                     <div style="font-size: 12px; color: var(--text-secondary);">${branch.name}</div>
                 </div>
-                <button class="btn btn-danger btn-sm" onclick="deleteBranch('${branch.id}', '${branch.name}')">🗑️</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteBranch('${branch.name}', '${branch.displayName}')">🗑️</button>
             </div>
         `).join('');
-        
+
     } catch (error) {
         console.error('Error loading branches:', error);
         showNotification('Failed to load branches', 'error');
@@ -9479,24 +9479,53 @@ async function loadSemestersConfig() {
     try {
         const response = await fetch(`${SERVER_URL}/api/config/semesters`);
         const data = await response.json();
-        
+
         const container = document.getElementById('semestersListContainer');
-        
+
         if (!data.success || data.semesters.length === 0) {
             container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No semesters configured</div>';
             return;
         }
-        
+
         container.innerHTML = data.semesters.map(semester => `
             <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
                 <div style="font-weight: 500; color: var(--text-primary);">Semester ${semester}</div>
                 <button class="btn btn-danger btn-sm" onclick="deleteSemester('${semester}')">🗑️</button>
             </div>
         `).join('');
-        
+
     } catch (error) {
         console.error('Error loading semesters:', error);
         showNotification('Failed to load semesters', 'error');
+    }
+}
+
+// Load departments configuration
+async function loadDepartmentsConfig() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/config/departments`);
+        const data = await response.json();
+
+        const container = document.getElementById('departmentsListContainer');
+
+        if (!data.success || data.departments.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No departments configured</div>';
+            return;
+        }
+
+        container.innerHTML = data.departments.map(dept => `
+            <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div>
+                    <div style="font-weight: 500; color: var(--text-primary);">${dept.name}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${dept.code}</div>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="deleteDepartment('${dept.value}', '${dept.name}')">🗑️</button>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error loading departments:', error);
+        showNotification('Failed to load departments', 'error');
     }
 }
 
@@ -9520,22 +9549,22 @@ function showAddBranchModal() {
             </div>
         </form>
     `;
-    
+
     document.getElementById('addBranchForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const value = document.getElementById('branchValue').value.trim();
         const displayName = document.getElementById('branchDisplayName').value.trim();
-        
+
         try {
             const response = await fetch(`${SERVER_URL}/api/config/branches`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ value, displayName })
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 showNotification('Branch added successfully', 'success');
                 closeModal();
@@ -9549,7 +9578,7 @@ function showAddBranchModal() {
             showNotification('Failed to add branch', 'error');
         }
     });
-    
+
     openModal();
 }
 
@@ -9569,21 +9598,21 @@ function showAddSemesterModal() {
             </div>
         </form>
     `;
-    
+
     document.getElementById('addSemesterForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const value = document.getElementById('semesterValue').value;
-        
+
         try {
             const response = await fetch(`${SERVER_URL}/api/config/semesters`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ value })
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 showNotification('Semester added successfully', 'success');
                 closeModal();
@@ -9597,7 +9626,60 @@ function showAddSemesterModal() {
             showNotification('Failed to add semester', 'error');
         }
     });
-    
+
+    openModal();
+}
+
+// Add department modal
+function showAddDepartmentModal() {
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <h2>➕ Add New Department</h2>
+        <form id="addDepartmentForm">
+            <div class="form-group">
+                <label>Department Code *</label>
+                <input type="text" id="departmentValue" class="form-input" placeholder="e.g., CSE" required>
+            </div>
+            <div class="form-group">
+                <label>Department Name *</label>
+                <input type="text" id="departmentDisplayName" class="form-input" placeholder="e.g., Computer Science" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Department</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    `;
+
+    document.getElementById('addDepartmentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const value = document.getElementById('departmentValue').value.trim();
+        const displayName = document.getElementById('departmentDisplayName').value.trim();
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config/departments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value, displayName })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Department added successfully', 'success');
+                closeModal();
+                loadDepartmentsConfig();
+                loadDepartmentsFilter(); // Refresh department filter
+            } else {
+                showNotification(data.error || 'Failed to add department', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding department:', error);
+            showNotification('Failed to add department', 'error');
+        }
+    });
+
     openModal();
 }
 
@@ -9606,14 +9688,14 @@ async function deleteBranch(branchId, branchName) {
     if (!confirm(`Are you sure you want to delete branch "${branchName}"?\n\nThis will not delete existing students or timetables.`)) {
         return;
     }
-    
+
     try {
         const deleteResponse = await fetch(`${SERVER_URL}/api/config/branches/${encodeURIComponent(branchName)}`, {
             method: 'DELETE'
         });
-        
+
         const data = await deleteResponse.json();
-        
+
         if (data.success) {
             showNotification('Branch deleted successfully', 'success');
             loadBranchesConfig();
@@ -9632,14 +9714,14 @@ async function deleteSemester(semesterValue) {
     if (!confirm(`Are you sure you want to delete Semester ${semesterValue}?\n\nThis will not delete existing students or timetables.`)) {
         return;
     }
-    
+
     try {
         const deleteResponse = await fetch(`${SERVER_URL}/api/config/semesters/${semesterValue}`, {
             method: 'DELETE'
         });
-        
+
         const data = await deleteResponse.json();
-        
+
         if (data.success) {
             showNotification('Semester deleted successfully', 'success');
             loadSemestersConfig();
@@ -9653,33 +9735,149 @@ async function deleteSemester(semesterValue) {
     }
 }
 
+// Load departments configuration
+async function loadDepartmentsConfig() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/config/departments`);
+        const data = await response.json();
+
+        const container = document.getElementById('departmentsListContainer');
+
+        if (!data.success || data.departments.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No departments configured</div>';
+            return;
+        }
+
+        container.innerHTML = data.departments.map(dept => `
+            <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div>
+                    <div style="font-weight: 500; color: var(--text-primary);">${dept.name}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${dept.code}</div>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="deleteDepartment('${dept.value}', '${dept.name}')">🗑️</button>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error loading departments:', error);
+        showNotification('Failed to load departments', 'error');
+    }
+}
+
+// show add department modal
+function showAddDepartmentModal() {
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <h2>➕ Add New Department</h2>
+        <form id="addDepartmentForm">
+            <div class="form-group">
+                <label>Department Code *</label>
+                <input type="text" id="deptValue" class="form-input" placeholder="e.g., CSE" required>
+            </div>
+            <div class="form-group">
+                <label>Display Name *</label>
+                <input type="text" id="deptDisplayName" class="form-input" placeholder="e.g., Computer Science" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Department</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    `;
+
+    document.getElementById('addDepartmentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const value = document.getElementById('deptValue').value.trim();
+        const displayName = document.getElementById('deptDisplayName').value.trim();
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config/departments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value, displayName })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Department added successfully', 'success');
+                closeModal();
+                loadDepartmentsConfig();
+                loadDynamicDropdownData(); // Refresh dropdowns
+                loadDepartmentsFilter(); // Refresh filter
+            } else {
+                showNotification(data.error || 'Failed to add department', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding department:', error);
+            showNotification('Failed to add department', 'error');
+        }
+    });
+
+    openModal();
+}
+
+// Delete department
+async function deleteDepartment(value, name) {
+    if (!confirm(`Are you sure you want to delete Department ${name} (${value})?\n\nThis will not delete existing teachers.`)) {
+        return;
+    }
+
+    try {
+        const deleteResponse = await fetch(`${SERVER_URL}/api/config/departments/${value}`, {
+            method: 'DELETE'
+        });
+
+        const data = await deleteResponse.json();
+
+        if (data.success) {
+            showNotification('Department deleted successfully', 'success');
+            loadDepartmentsConfig();
+            loadDynamicDropdownData(); // Refresh dropdowns
+            loadDepartmentsFilter(); // Refresh filter
+        } else {
+            showNotification(data.error || 'Failed to delete department', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting department:', error);
+        showNotification('Failed to delete department', 'error');
+    }
+}
+
 // Setup configuration event listeners
 function setupConfigListeners() {
     const addBranchBtn = document.getElementById('addBranchBtn');
     if (addBranchBtn) {
         addBranchBtn.addEventListener('click', showAddBranchModal);
     }
-    
+
     const addSemesterBtn = document.getElementById('addSemesterBtn');
     if (addSemesterBtn) {
         addSemesterBtn.addEventListener('click', showAddSemesterModal);
+    }
+
+    const addDepartmentBtn = document.getElementById('addDepartmentBtn');
+    if (addDepartmentBtn) {
+        addDepartmentBtn.addEventListener('click', showAddDepartmentModal);
     }
 }
 
 // Load config when config section is opened
 document.addEventListener('DOMContentLoaded', () => {
     setupConfigListeners();
-    
+
     // Load config when Settings section becomes active
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             if (mutation.target.id === 'settings-section' && mutation.target.classList.contains('active')) {
                 loadBranchesConfig();
                 loadSemestersConfig();
+                loadDepartmentsConfig();
             }
         });
     });
-    
+
     const settingsSection = document.getElementById('settings-section');
     if (settingsSection) {
         observer.observe(settingsSection, { attributes: true, attributeFilter: ['class'] });

@@ -10,7 +10,6 @@ import {
   Platform,
 } from 'react-native';
 import { BellIcon, CheckIcon, ClockIcon } from './Icons';
-import NotificationService from './NotificationService';
 import { getServerTime } from './ServerTime';
 
 export default function NotificationsScreen({ theme, userData, socketUrl }) {
@@ -22,21 +21,6 @@ export default function NotificationsScreen({ theme, userData, socketUrl }) {
 
   useEffect(() => {
     if (userData?.role === 'teacher') {
-      // Request notification permissions
-      NotificationService.requestPermissions();
-      
-      // Setup notification listeners
-      NotificationService.setupListeners(
-        (notification) => {
-          // Show in-app notification banner
-          showInAppNotification(notification.request.content);
-        },
-        (response) => {
-          // Handle notification tap
-          console.log('User tapped notification:', response);
-        }
-      );
-      
       fetchTodaySchedule();
       
       // Auto-refresh every minute
@@ -46,7 +30,6 @@ export default function NotificationsScreen({ theme, userData, socketUrl }) {
       
       return () => {
         clearInterval(interval);
-        NotificationService.removeListeners();
       };
     }
   }, [userData]);
@@ -73,15 +56,10 @@ export default function NotificationsScreen({ theme, userData, socketUrl }) {
       if (data.success) {
         const schedule = data.schedule || [];
         setTodaySchedule(schedule);
-        generateNotifications(schedule);
         
-        // Schedule push notifications for all classes
+        // Generate notifications for today's schedule
         if (schedule.length > 0) {
-          NotificationService.scheduleAllClassesForDay(schedule);
-          
-          // Update badge count with upcoming classes
-          const upcomingCount = NotificationService.getUpcomingClassesCount(schedule);
-          NotificationService.setBadgeCount(upcomingCount);
+          generateNotifications(schedule);
         }
       }
     } catch (error) {

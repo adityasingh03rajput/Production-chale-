@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, TouchableOpacity, Animated, StyleSheet, Platform } from 'react-native';
-import FluidSimulationWebView from './FluidSimulationWebView';
 
 const FloatingBrandButton = ({ theme, studentId, socketUrl }) => {
   const [showParticles, setShowParticles] = useState(false);
@@ -119,16 +118,6 @@ const FloatingBrandButton = ({ theme, studentId, socketUrl }) => {
           <View style={styles.innerCircle} />
         </TouchableOpacity>
         </Animated.View>
-      )}
-
-      {showParticles && (
-        <FluidSimulationWebView
-          visible={showParticles}
-          onClose={handleClose}
-          theme={theme}
-          studentId={studentId}
-          socketUrl={socketUrl}
-        />
       )}
     </>
   );

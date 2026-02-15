@@ -6,7 +6,8 @@ const SemesterSelector = ({
   onClose, 
   onSelect, 
   currentSelection,
-  theme
+  theme,
+  isStudent = false
 }) => {
   const semesters = [
     { value: 'auto', label: '📚 Current Lecture (Auto)', description: 'Based on timetable' },
@@ -41,9 +42,16 @@ const SemesterSelector = ({
         <View style={[styles.modalContainer, { backgroundColor: theme.card }]}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.title, { color: theme.text }]}>
-              Select Semester & Branch
-            </Text>
+            <View style={styles.headerContent}>
+              <Text style={[styles.title, { color: theme.text }]}>
+                {isStudent ? 'Select Your Branch & Semester' : 'Select Semester & Branch'}
+              </Text>
+              {isStudent && (
+                <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+                  Choose your branch and semester to view your personal timetable
+                </Text>
+              )}
+            </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Text style={[styles.closeText, { color: theme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
@@ -142,7 +150,9 @@ const SemesterSelector = ({
               style={[styles.applyButton, { backgroundColor: theme.primary }]}
               onPress={onClose}
             >
-              <Text style={styles.applyButtonText}>Apply Selection</Text>
+              <Text style={styles.applyButtonText}>
+                {isStudent ? 'View My Timetable' : 'Apply Selection'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -170,14 +180,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
+  headerContent: {
+    flex: 1,
+    marginRight: 20,
+  },
   title: {
     fontSize: 20,
     fontWeight: '600',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   closeButton: {
     padding: 4,

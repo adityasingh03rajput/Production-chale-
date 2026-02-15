@@ -8,7 +8,7 @@ import {
   Modal,
 } from 'react-native';
 
-const TimetableSelector = ({ theme, onSelect }) => {
+const TimetableSelector = ({ theme, onSelect, isStudent = false }) => {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('');
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -66,11 +66,16 @@ const TimetableSelector = ({ theme, onSelect }) => {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.primary }]}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerIcon}>🎓</Text>
-          <Text style={styles.headerTitle}>Select Timetable</Text>
+          <Text style={styles.headerIcon}>{isStudent ? '👤' : '🎓'}</Text>
+          <Text style={styles.headerTitle}>
+            {isStudent ? 'Your Timetable' : 'Select Timetable'}
+          </Text>
         </View>
         <Text style={styles.headerSubtitle}>
-          Choose your branch and semester to view the timetable
+          {isStudent 
+            ? 'Select your branch and semester to view your personal timetable'
+            : 'Choose your branch and semester to view the timetable'
+          }
         </Text>
       </View>
 
@@ -152,7 +157,9 @@ const TimetableSelector = ({ theme, onSelect }) => {
           },
         ]}
       >
-        <Text style={styles.submitButtonText}>View Timetable</Text>
+        <Text style={styles.submitButtonText}>
+          {isStudent ? 'View My Timetable' : 'View Timetable'}
+        </Text>
         <Text style={styles.submitButtonIcon}>▶</Text>
       </TouchableOpacity>
 

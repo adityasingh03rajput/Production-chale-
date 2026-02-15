@@ -40,14 +40,23 @@ import { useUnifiedTimer } from './UnifiedTimerManager';
 import SecurityStatusIndicator from './SecurityStatusIndicator';
 // WiFi BSSID Integration from LetsBunk
 
-const API_URL = 'https://letsbunk-uw7g.onrender.com/api/config';
-const SOCKET_URL = 'https://letsbunk-uw7g.onrender.com';
+// Configuration - Move to environment variables in production
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://letsbunk-uw7g.onrender.com/api/config';
+const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://letsbunk-uw7g.onrender.com';
+
+// Constants
 const CACHE_KEY = '@timer_config';
 const ROLE_KEY = '@user_role';
 const STUDENT_ID_KEY = '@student_id';
 const STUDENT_NAME_KEY = '@student_name';
 const SEMESTER_KEY = '@user_semester';
 const BRANCH_KEY = '@user_branch';
+
+// Timing constants (in milliseconds)
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const INITIAL_HEARTBEAT_DELAY = 60 * 1000; // 1 minute
+const HEALTH_CHECK_TIMEOUT = 5000; // 5 seconds
+const WIFI_CHECK_INTERVAL = 30000; // 30 seconds
 const USER_DATA_KEY = '@user_data';
 const LOGIN_ID_KEY = '@login_id';
 const THEME_KEY = '@app_theme';
@@ -439,11 +448,47 @@ export default function App() {
 
   // Fetch timetable when user is logged in and semester/branch are available
   useEffect(() => {
-    if (selectedRole === 'student' && semester && branch && !showLogin) {
-      console.log('Fetching timetable for logged in student:', semester, branch);
-      fetchTimetable(semester, branch);
+    if (selectedRole === 'student' && !showLogin) {
+      // For students, try to get semester/branch from stored data if not already set
+      if (!semester || !branch) {
+        const loadStudentData = async () => {
+          try {
+            // Get stored student data
+            const storedSemester = await AsyncStorage.getItem(SEMESTER_KEY);
+            const storedBranch = await AsyncStorage.getItem(BRANCH_KEY);
+            
+            if (storedSemester && storedBranch) {
+              console.log('📚 Auto-loading student data:', storedSemester, storedBranch);
+              setSemester(storedSemester);
+              setBranch(storedBranch);
+            } else {
+              console.log('⚠️ No semester/branch found for student - using defaults');
+              // Set default values for students (can be customized based on your needs)
+              setSemester('1'); // Default to 1st semester
+              setBranch('B.Tech Computer Science'); // Default to Computer Science
+            }
+          } catch (error) {
+            console.log('Error loading student data:', error);
+            // Set defaults on error
+            setSemester('1');
+            setBranch('B.Tech Computer Science');
+          }
+        };
+        loadStudentData();
+      } else {
+        console.log('Fetching timetable for logged in student:', semester, branch);
+        fetchTimetable(semester, branch);
+      }
     }
   }, [selectedRole, semester, branch, showLogin]);
+
+  // Fetch timetable when semester/branch are set for students
+  useEffect(() => {
+    if (selectedRole === 'student' && semester && branch && !showLogin) {
+      console.log('📅 Semester/branch available, fetching timetable:', semester, branch);
+      fetchTimetable(semester, branch);
+    }
+  }, [semester, branch, selectedRole, showLogin]);
 
   // Force refetch if current day is missing from timetable (handles old timetables without Sunday)
   useEffect(() => {
@@ -659,9 +704,6 @@ export default function App() {
   }, [isRunning, selectedRole, studentId, serverTimerData.attendedSeconds]);
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:initEffect',message:'App init effect started',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     // Initialize server time synchronization (CRITICAL for security)
     const serverTime = initializeServerTime(SOCKET_URL);
     serverTime.initialize().then(async (success) => {
@@ -770,9 +812,6 @@ export default function App() {
       console.log('🔌 Socket connecting:', socketRef.current?.connecting);
       console.log('🔌 Socket connected:', socketRef.current?.connected);
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:setupSocket',message:'Socket create catch',data:{message:error?.message},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       console.error('❌❌❌ FAILED TO CREATE SOCKET:', error);
       console.error('❌ Error message:', error.message);
       console.error('❌ Error stack:', error.stack);
@@ -1302,9 +1341,6 @@ export default function App() {
   };
 
   const loadConfig = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:loadConfig',message:'loadConfig entry',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     try {
       // Load all data in parallel for better performance
       const [savedTheme, cachedUserData, cachedLoginId, cachedConfig, dailyVerification] = await Promise.all([
@@ -1391,9 +1427,6 @@ export default function App() {
       // Fetch fresh config from server
       fetchConfig();
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:loadConfig',message:'loadConfig catch',data:{message:error?.message},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       console.log('Error loading cache:', error);
     } finally {
       setIsInitializing(false);
@@ -2517,9 +2550,6 @@ export default function App() {
         setLoginError(data.message || 'Invalid credentials');
       }
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.js:handleLogin',message:'Login catch',data:{message:error?.message},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
       setLoginError('Connection error. Please check server.');
       console.error('Login error:', error);
     } finally {
@@ -3343,45 +3373,41 @@ export default function App() {
           teacherData={userData}
           onLogout={handleLogout}
         />
-        {/* Semester Selector */}
-        <SemesterSelector
-          visible={showSemesterSelector}
-          onClose={() => setShowSemesterSelector(false)}
-          onSelect={(selection) => {
-            setManualSelection(selection);
+        {/* Semester Selector - Only for Teachers */}
+        {selectedRole === 'teacher' && (
+          <SemesterSelector
+            visible={showSemesterSelector}
+            onClose={() => setShowSemesterSelector(false)}
+            isStudent={false}
+            onSelect={(selection) => {
+              setManualSelection(selection);
 
-            // Update global semester/branch for manual selection
-            if (selection.semester !== 'auto') {
-              console.log(`📝 Manual selection: ${selection.branch} Semester ${selection.semester}`);
-              // Update global semester/branch so TimetableScreen can use them
-              setSemester(selection.semester);
-              setBranch(selection.branch);
+              // Update global semester/branch for manual selection
+              if (selection.semester !== 'auto') {
+                console.log(`📝 Manual selection: ${selection.branch} Semester ${selection.semester}`);
+                // Update global semester/branch so TimetableScreen can use them
+                setSemester(selection.semester);
+                setBranch(selection.branch);
 
-              // Create manual class info for banner display
-              setCurrentClassInfo({
-                subject: 'Manual Selection',
-                branch: selection.branch,
-                semester: selection.semester,
-                isManual: true
-              });
-            } else {
-              console.log(`🔄 Switched to auto mode - will use current class from timetable`);
-              // Clear manual selection and let auto detection handle it
-              setSemester(null);
-              setBranch(null);
-              setCurrentClassInfo(null);
-            }
-
-            // Refresh student list with new selection (pass selection so we use it immediately)
-            if (selection.semester !== 'auto' && selection.branch) {
-              fetchStudents(selection);
-            } else {
-              setTimeout(() => fetchStudents(), 300);
-            }
-          }}
-          currentSelection={manualSelection}
-          theme={theme}
-        />
+                // Create manual class info for banner display
+                setCurrentClassInfo({
+                  subject: 'Manual Selection',
+                  branch: selection.branch,
+                  semester: selection.semester,
+                  isManual: true
+                });
+              } else {
+                console.log(`🔄 Switched to auto mode - will use current class from timetable`);
+                // Clear manual selection and let auto detection handle it
+                setSemester(null);
+                setBranch(null);
+                setCurrentClassInfo(null);
+              }
+            }}
+            currentSelection={manualSelection}
+            theme={theme}
+          />
+        )}
         {/* Offline Toast Message */}
         {isOffline && (
           <Animated.View style={{

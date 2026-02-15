@@ -103,9 +103,6 @@ export const useUnifiedTimer = (studentId, serverUrl, lectureInfo) => {
    */
   const validateTimerSync = useCallback(async (serverData) => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UnifiedTimerManager.js:validateTimerSync',message:'validateTimerSync before getServerTime',data:{},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
       const serverTime = getServerTime();
       const currentServerTime = serverTime.now();
       const lastSync = lastSyncTimeRef.current;
@@ -150,9 +147,6 @@ export const useUnifiedTimer = (studentId, serverUrl, lectureInfo) => {
    * Sync with server - authoritative timer source
    */
   const syncWithServer = useCallback(async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c55978b2-e466-4572-9aa3-8e6b3596be52',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UnifiedTimerManager.js:syncWithServer',message:'syncWithServer entry',data:{studentId:!!studentId,serverUrl:!!serverUrl},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
     if (!studentId || !serverUrl) return;
 
     try {

@@ -666,9 +666,32 @@ export default function TimetableScreen({
           <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
             {isTeacher 
               ? "No current class found. Use 'Select Semester & Branch' to view a specific timetable."
-              : "Contact your administrator"
+              : "Please select your branch and semester to view your timetable"
             }
           </Text>
+          {!isTeacher && (
+            <TouchableOpacity
+              onPress={() => {
+                // This will trigger the semester selector in the parent component
+                Alert.alert(
+                  'Select Your Timetable',
+                  'Go to the Home tab and tap "📚 Select Semester & Branch" to choose your branch and semester.',
+                  [{ text: 'OK' }]
+                );
+              }}
+              style={{
+                marginTop: 16,
+                backgroundColor: theme.primary,
+                paddingHorizontal: 20,
+                paddingVertical: 12,
+                borderRadius: 8,
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>
+                📚 Select Your Branch & Semester
+              </Text>
+            </TouchableOpacity>
+          )}
           {isTeacher && (
             <TouchableOpacity
               onPress={() => {
