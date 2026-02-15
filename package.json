@@ -21,6 +21,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.13.2",
     "babel-preset-expo": "^54.0.10",
+    "bcrypt": "^5.1.1",
     "canvas": "^3.2.0",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",

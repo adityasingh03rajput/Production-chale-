@@ -300,22 +300,11 @@
                     <div class="filters">
                         <select id="timetableSemester" class="filter-select">
                             <option value="">Select Semester</option>
-                            <option value="1">Semester 1</option>
-                            <option value="2">Semester 2</option>
-                            <option value="3">Semester 3</option>
-                            <option value="4">Semester 4</option>
-                            <option value="5">Semester 5</option>
-                            <option value="6">Semester 6</option>
-                            <option value="7">Semester 7</option>
-                            <option value="8">Semester 8</option>
+                            <!-- Populated dynamically -->
                         </select>
                         <select id="timetableCourse" class="filter-select">
-                            <option value="">Select Course</option>
-                            <option value="B.Tech Data Science">Data Science</option>
-                            <option value="CSE">Computer Science</option>
-                            <option value="ECE">Electronics</option>
-                            <option value="ME">Mechanical</option>
-                            <option value="CE">Civil</option>
+                            <option value="">Select Branch</option>
+                            <!-- Populated dynamically -->
                         </select>
                     </div>
 
@@ -347,24 +336,11 @@
                     <div class="filters">
                         <select id="subjectSemesterFilter" class="filter-select">
                             <option value="">All Semesters</option>
-                            <option value="1">Semester 1</option>
-                            <option value="2">Semester 2</option>
-                            <option value="3">Semester 3</option>
-                            <option value="4">Semester 4</option>
-                            <option value="5">Semester 5</option>
-                            <option value="6">Semester 6</option>
-                            <option value="7">Semester 7</option>
-                            <option value="8">Semester 8</option>
+                            <!-- Populated dynamically -->
                         </select>
                         <select id="subjectBranchFilter" class="filter-select">
                             <option value="">All Branches</option>
-                            <option value="B.Tech Computer Science">Computer Science (CS)</option>
-                            <option value="B.Tech Data Science">Data Science (DS)</option>
-                            <option value="B.Tech Information Technology">Information Technology (IT)</option>
-                            <option value="B.Tech Artificial Intelligence">Artificial Intelligence (AI)</option>
-                            <option value="B.Tech Electronics">Electronics (EC)</option>
-                            <option value="B.Tech Mechanical">Mechanical (ME)</option>
-                            <option value="B.Tech Civil">Civil (CE)</option>
+                            <!-- Populated dynamically -->
                         </select>
                         <select id="subjectTypeFilter" class="filter-select">
                             <option value="">All Types</option>
@@ -515,11 +491,7 @@
                             </label>
                             <select id="attendanceCourseFilter" class="filter-select filter-required">
                                 <option value="">-- Select Branch --</option>
-                                <option value="B.Tech Data Science">Data Science (DS)</option>
-                                <option value="CSE">Computer Science (CSE)</option>
-                                <option value="ECE">Electronics (ECE)</option>
-                                <option value="ME">Mechanical (ME)</option>
-                                <option value="CE">Civil (CE)</option>
+                                <!-- Populated dynamically -->
                             </select>
                         </div>
                         <div class="filter-group-required">
@@ -528,14 +500,7 @@
                             </label>
                             <select id="attendanceSemesterFilter" class="filter-select filter-required">
                                 <option value="">-- Select Semester --</option>
-                                <option value="1">Semester 1</option>
-                                <option value="2">Semester 2</option>
-                                <option value="3">Semester 3</option>
-                                <option value="4">Semester 4</option>
-                                <option value="5">Semester 5</option>
-                                <option value="6">Semester 6</option>
-                                <option value="7">Semester 7</option>
-                                <option value="8">Semester 8</option>
+                                <!-- Populated dynamically -->
                             </select>
                         </div>
                         <button class="btn btn-primary" id="fetchAttendanceBtn" disabled>
@@ -693,6 +658,38 @@
                 <!-- Settings Section -->
                 <section id="settings-section" class="section">
                     <h2 class="section-title">Settings</h2>
+
+                    <!-- Branch & Semester Configuration -->
+                    <div style="margin-bottom: 40px;">
+                        <h3 style="color: var(--text-primary); margin-bottom: 20px; font-size: 20px;">🎓 Branch & Semester Configuration</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                            <!-- Branches Configuration -->
+                            <div class="settings-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                    <h3>Branches</h3>
+                                    <button class="btn btn-primary btn-sm" id="addBranchBtn">➕ Add Branch</button>
+                                </div>
+                                <div id="branchesListContainer" style="max-height: 300px; overflow-y: auto;">
+                                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                                        Loading branches...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Semesters Configuration -->
+                            <div class="settings-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                    <h3>Semesters</h3>
+                                    <button class="btn btn-primary btn-sm" id="addSemesterBtn">➕ Add Semester</button>
+                                </div>
+                                <div id="semestersListContainer" style="max-height: 300px; overflow-y: auto;">
+                                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                                        Loading semesters...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="settings-grid">
                         <div class="settings-card">

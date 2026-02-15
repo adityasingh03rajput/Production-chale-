@@ -40,6 +40,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcrypt'); // Add bcrypt for password hashing
 
 // Cloudinary configuration
 const cloudinary = require('cloudinary').v2;
@@ -51,10 +52,17 @@ cloudinary.config({
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS Configuration - Restrict in production
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',') 
+    : ['http://localhost:3000', 'http://localhost:8081'];
+
 const io = new Server(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
+        origin: process.env.NODE_ENV === 'production' ? ALLOWED_ORIGINS : "*",
+        methods: ["GET", "POST"],
+        credentials: true
     },
     pingTimeout: 60000,
     pingInterval: 25000,
@@ -62,9 +70,12 @@ const io = new Server(server, {
     transports: ['websocket', 'polling']
 });
 
-app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' ? ALLOWED_ORIGINS : "*",
+    credentials: true
+}));
+app.use(express.json({ limit: '10mb' })); // Reduced from 100mb for security
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -131,18 +142,62 @@ if (!fs.existsSync(uploadsDir)) {
 // Serve uploaded files
 app.use('/uploads', express.static(uploadsDir));
 
-// MongoDB Connection
+// MongoDB Connection with proper pool configuration
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/attendance_app';
 mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 30000, // Increased to 30 seconds for Render
+    serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
+    maxPoolSize: 10, // Maximum number of connections in the pool
+    minPoolSize: 2,  // Minimum number of connections
+    maxIdleTimeMS: 30000, // Close idle connections after 30 seconds
 }).then(() => {
     console.log('✅ Connected to MongoDB Atlas');
     console.log('📍 Database:', mongoose.connection.name);
+    
+    // Create indexes for better performance
+    createDatabaseIndexes();
 }).catch(err => {
     console.log('⚠️  MongoDB not connected, using in-memory storage');
     console.log('Error:', err.message);
 });
+
+// Function to create database indexes
+async function createDatabaseIndexes() {
+    try {
+        console.log('📊 Creating database indexes...');
+        
+        // StudentManagement indexes
+        await StudentManagement.collection.createIndex({ enrollmentNo: 1 }, { unique: true });
+        await StudentManagement.collection.createIndex({ email: 1 });
+        await StudentManagement.collection.createIndex({ semester: 1, course: 1 });
+        await StudentManagement.collection.createIndex({ isRunning: 1 });
+        
+        // AttendanceSession indexes
+        await AttendanceSession.collection.createIndex({ studentId: 1, date: -1 });
+        await AttendanceSession.collection.createIndex({ date: -1, isActive: 1 });
+        
+        // AttendanceRecord indexes
+        await AttendanceRecord.collection.createIndex({ enrollmentNo: 1, date: -1 });
+        await AttendanceRecord.collection.createIndex({ date: -1 });
+        await AttendanceRecord.collection.createIndex({ semester: 1, branch: 1, date: -1 });
+        await AttendanceRecord.collection.createIndex({ 'lectures.teacher': 1, date: -1 });
+        
+        // Timetable indexes
+        await Timetable.collection.createIndex({ semester: 1, branch: 1 }, { unique: true });
+        
+        // Teacher indexes
+        await Teacher.collection.createIndex({ employeeId: 1 }, { unique: true });
+        await Teacher.collection.createIndex({ email: 1 });
+        
+        // Classroom indexes
+        await Classroom.collection.createIndex({ roomNumber: 1 }, { unique: true });
+        await Classroom.collection.createIndex({ wifiBSSID: 1 });
+        
+        console.log('✅ Database indexes created successfully');
+    } catch (error) {
+        console.error('⚠️  Error creating indexes:', error.message);
+    }
+}
 
 // Handle MongoDB connection errors
 mongoose.connection.on('error', (err) => {
@@ -1234,7 +1289,7 @@ app.get('/api/teacher/current-class-students/:teacherId', async (req, res) => {
     }
 });
 
-// Helper function to convert time string to minutes
+// Helper function to convert time string to minutes (single definition)
 function timeToMinutes(timeStr) {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -1469,11 +1524,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// Helper: Convert time string to minutes
-function timeToMinutes(timeStr) {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
-}
+// Helper function already defined above - removed duplicate
 
 // Helper: Get current lecture info from timetable
 async function getCurrentLectureInfo(semester, branch) {
@@ -2568,122 +2619,7 @@ app.post('/api/attendance/backup', async (req, res) => {
     }
 });
 
-// Offline Attendance Sync - Sync offline time when student reconnects
-app.post('/api/attendance/sync-offline', async (req, res) => {
-    try {
-        const { studentId, offlineStartTime, offlineEndTime, offlineDuration, lastKnownSeconds, lectureSubject } = req.body;
 
-        console.log(`🔄 Syncing offline attendance for student ${studentId}`);
-        console.log(`   Offline period: ${new Date(offlineStartTime).toLocaleTimeString()} - ${new Date(offlineEndTime).toLocaleTimeString()}`);
-        console.log(`   Duration: ${offlineDuration}s (${Math.floor(offlineDuration / 60)}m)`);
-
-        if (!studentId || !offlineStartTime || !offlineEndTime) {
-            return res.status(400).json({
-                success: false,
-                error: 'Missing required fields'
-            });
-        }
-
-        // Check if Random Ring was triggered during offline period
-        const randomRing = await RandomRing.findOne({
-            'selectedStudents.studentId': studentId,
-            triggerTime: {
-                $gte: new Date(offlineStartTime),
-                $lte: new Date(offlineEndTime)
-            }
-        });
-
-        if (randomRing) {
-            console.log(`⚠️  Random Ring was triggered during offline period: ${randomRing._id}`);
-
-            // Check if teacher manually accepted student
-            const studentData = randomRing.selectedStudents.find(s =>
-                s.studentId === studentId || s.enrollmentNo === studentId
-            );
-
-            if (studentData && studentData.teacherAccepted) {
-                // Teacher accepted, allow full offline time
-                console.log(`✅ Teacher accepted student during offline - allowing full offline time`);
-
-                const totalSeconds = lastKnownSeconds + offlineDuration;
-                await StudentManagement.findByIdAndUpdate(studentId, {
-                    'attendanceSession.totalAttendedSeconds': totalSeconds,
-                    $push: {
-                        'attendanceSession.offlinePeriods': {
-                            startTime: new Date(offlineStartTime),
-                            endTime: new Date(offlineEndTime),
-                            duration: offlineDuration
-                        }
-                    }
-                });
-
-                return res.json({
-                    success: true,
-                    randomRingMissed: false,
-                    teacherAccepted: true,
-                    totalAttendedSeconds: totalSeconds,
-                    message: 'Teacher accepted you during offline period - full time counted'
-                });
-            } else {
-                // Random Ring failed, cap attendance at Random Ring time
-                console.log(`❌ Random Ring failed - capping attendance`);
-
-                const student = await StudentManagement.findById(studentId);
-                if (!student || !student.attendanceSession || !student.attendanceSession.sessionStartTime) {
-                    return res.status(404).json({
-                        success: false,
-                        error: 'Student session not found'
-                    });
-                }
-
-                const cappedSeconds = Math.floor((randomRing.triggerTime - student.attendanceSession.sessionStartTime) / 1000);
-
-                await StudentManagement.findByIdAndUpdate(studentId, {
-                    'attendanceSession.totalAttendedSeconds': cappedSeconds,
-                    'attendanceSession.randomRingFailed': true,
-                    isRunning: false,
-                    status: 'absent'
-                });
-
-                return res.json({
-                    success: true,
-                    randomRingMissed: true,
-                    cappedAt: cappedSeconds,
-                    cappedMinutes: Math.floor(cappedSeconds / 60),
-                    message: `Attendance capped at Random Ring time (${Math.floor(cappedSeconds / 60)} minutes)`
-                });
-            }
-        } else {
-            // No Random Ring during offline period, accept full offline time
-            console.log(`✅ No Random Ring during offline - accepting full offline time`);
-
-            const totalSeconds = lastKnownSeconds + offlineDuration;
-            await StudentManagement.findByIdAndUpdate(studentId, {
-                'attendanceSession.totalAttendedSeconds': totalSeconds,
-                $push: {
-                    'attendanceSession.offlinePeriods': {
-                        startTime: new Date(offlineStartTime),
-                        endTime: new Date(offlineEndTime),
-                        duration: offlineDuration
-                    }
-                }
-            });
-
-            return res.json({
-                success: true,
-                randomRingMissed: false,
-                totalAttendedSeconds: totalSeconds,
-                message: 'Offline time synced successfully'
-            });
-        }
-    } catch (error) {
-        console.error('❌ Error syncing offline attendance:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
 
 // Get attendance statistics
 app.get('/api/attendance/stats', async (req, res) => {
@@ -3253,7 +3189,25 @@ app.get('/api/time', (req, res) => {
 app.get('/api/config/branches', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
-            // Get unique branches from StudentManagement collection
+            // Get branches from Config collection
+            const configBranches = await Config.find({ type: 'branch', isActive: true }).sort({ value: 1 });
+            
+            if (configBranches.length > 0) {
+                // Use Config collection data
+                const branchList = configBranches.map(branch => ({
+                    id: branch.value.toLowerCase().replace(/\s+/g, '-'),
+                    name: branch.value,
+                    displayName: branch.displayName || branch.value
+                }));
+                
+                return res.json({
+                    success: true,
+                    branches: branchList,
+                    count: branchList.length
+                });
+            }
+            
+            // Fallback: Get unique branches from StudentManagement collection
             const branches = await StudentManagement.distinct('course');
 
             // Format branches with metadata
@@ -3288,7 +3242,21 @@ app.get('/api/config/branches', async (req, res) => {
 app.get('/api/config/semesters', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
-            // Get unique semesters from StudentManagement collection
+            // Get semesters from Config collection
+            const configSemesters = await Config.find({ type: 'semester', isActive: true }).sort({ value: 1 });
+            
+            if (configSemesters.length > 0) {
+                // Use Config collection data
+                const semesterList = configSemesters.map(sem => sem.value);
+                
+                return res.json({
+                    success: true,
+                    semesters: semesterList,
+                    count: semesterList.length
+                });
+            }
+            
+            // Fallback: Get unique semesters from StudentManagement collection
             const semesters = await StudentManagement.distinct('semester');
 
             // Sort numerically
@@ -3309,6 +3277,133 @@ app.get('/api/config/semesters', async (req, res) => {
         }
     } catch (error) {
         console.error('Error fetching semesters:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Add new branch
+app.post('/api/config/branches', async (req, res) => {
+    try {
+        const { value, displayName } = req.body;
+        
+        if (!value) {
+            return res.status(400).json({ success: false, error: 'Branch value is required' });
+        }
+        
+        const newBranch = await Config.create({
+            type: 'branch',
+            value: value.trim(),
+            displayName: displayName?.trim() || value.trim(),
+            isActive: true
+        });
+        
+        res.json({ success: true, branch: newBranch });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, error: 'Branch already exists' });
+        }
+        console.error('Error adding branch:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Update branch
+app.put('/api/config/branches/:id', async (req, res) => {
+    try {
+        const { value, displayName, isActive } = req.body;
+        
+        const updated = await Config.findByIdAndUpdate(
+            req.params.id,
+            { 
+                value: value?.trim(),
+                displayName: displayName?.trim(),
+                isActive,
+                updatedAt: Date.now()
+            },
+            { new: true, runValidators: true }
+        );
+        
+        if (!updated) {
+            return res.status(404).json({ success: false, error: 'Branch not found' });
+        }
+        
+        res.json({ success: true, branch: updated });
+    } catch (error) {
+        console.error('Error updating branch:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete branch
+app.delete('/api/config/branches/:identifier', async (req, res) => {
+    try {
+        const identifier = req.params.identifier;
+        
+        // Try to delete by _id first, then by value
+        let deleted = await Config.findByIdAndDelete(identifier);
+        
+        if (!deleted) {
+            // Try finding by value
+            deleted = await Config.findOneAndDelete({ type: 'branch', value: identifier });
+        }
+        
+        if (!deleted) {
+            return res.status(404).json({ success: false, error: 'Branch not found' });
+        }
+        
+        res.json({ success: true, message: 'Branch deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting branch:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Add new semester
+app.post('/api/config/semesters', async (req, res) => {
+    try {
+        const { value } = req.body;
+        
+        if (!value) {
+            return res.status(400).json({ success: false, error: 'Semester value is required' });
+        }
+        
+        const newSemester = await Config.create({
+            type: 'semester',
+            value: value.toString().trim(),
+            displayName: `Semester ${value}`,
+            isActive: true
+        });
+        
+        res.json({ success: true, semester: newSemester });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, error: 'Semester already exists' });
+        }
+        console.error('Error adding semester:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete semester
+app.delete('/api/config/semesters/:identifier', async (req, res) => {
+    try {
+        const identifier = req.params.identifier;
+        
+        // Try to delete by _id first, then by value
+        let deleted = await Config.findByIdAndDelete(identifier);
+        
+        if (!deleted) {
+            // Try finding by value
+            deleted = await Config.findOneAndDelete({ type: 'semester', value: identifier });
+        }
+        
+        if (!deleted) {
+            return res.status(404).json({ success: false, error: 'Semester not found' });
+        }
+        
+        res.json({ success: true, message: 'Semester deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting semester:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -3411,6 +3506,9 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             return res.json({ success: false, message: 'ID and password required' });
         }
 
+        // Sanitize input to prevent NoSQL injection
+        const sanitizedId = String(id).trim();
+
         // Try to find as student first
         let user = null;
         let role = null;
@@ -3419,61 +3517,75 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             // Check in StudentManagement collection
             user = await StudentManagement.findOne({
                 $or: [
-                    { enrollmentNo: id },
-                    { email: id }
+                    { enrollmentNo: sanitizedId },
+                    { email: sanitizedId }
                 ]
             });
 
-            if (user && user.password === password) {
-                role = 'student';
-                console.log('✅ Student logged in:', user.name);
-                console.log('📸 PhotoUrl from DB:', user.photoUrl);
-                return res.json({
-                    success: true,
-                    user: {
-                        _id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        enrollmentNo: user.enrollmentNo,
-                        course: user.course,
-                        semester: user.semester,
-                        phone: user.phone,
-                        photoUrl: user.photoUrl,
-                        role: 'student'
-                    }
-                });
+            if (user) {
+                // Check if password is hashed (starts with $2b$ for bcrypt)
+                const isPasswordValid = user.password.startsWith('$2b$') 
+                    ? await bcrypt.compare(password, user.password)
+                    : user.password === password; // Fallback for legacy plain text passwords
+
+                if (isPasswordValid) {
+                    role = 'student';
+                    console.log('✅ Student logged in:', user.name);
+                    console.log('📸 PhotoUrl from DB:', user.photoUrl);
+                    return res.json({
+                        success: true,
+                        user: {
+                            _id: user._id,
+                            name: user.name,
+                            email: user.email,
+                            enrollmentNo: user.enrollmentNo,
+                            course: user.course,
+                            semester: user.semester,
+                            phone: user.phone,
+                            photoUrl: user.photoUrl,
+                            role: 'student'
+                        }
+                    });
+                }
             }
 
             // Check in Teacher collection
             user = await Teacher.findOne({
                 $or: [
-                    { employeeId: id },
-                    { email: id }
+                    { employeeId: sanitizedId },
+                    { email: sanitizedId }
                 ]
             });
 
-            if (user && user.password === password) {
-                role = 'teacher';
-                console.log('Teacher logged in:', user.name);
-                return res.json({
-                    success: true,
-                    user: {
-                        _id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        employeeId: user.employeeId,
-                        department: user.department,
-                        phone: user.phone,
-                        photoUrl: user.photoUrl,
-                        canEditTimetable: user.canEditTimetable,
-                        role: 'teacher'
-                    }
-                });
+            if (user) {
+                // Check if password is hashed
+                const isPasswordValid = user.password.startsWith('$2b$')
+                    ? await bcrypt.compare(password, user.password)
+                    : user.password === password; // Fallback for legacy plain text passwords
+
+                if (isPasswordValid) {
+                    role = 'teacher';
+                    console.log('Teacher logged in:', user.name);
+                    return res.json({
+                        success: true,
+                        user: {
+                            _id: user._id,
+                            name: user.name,
+                            email: user.email,
+                            employeeId: user.employeeId,
+                            department: user.department,
+                            phone: user.phone,
+                            photoUrl: user.photoUrl,
+                            canEditTimetable: user.canEditTimetable,
+                            role: 'teacher'
+                        }
+                    });
+                }
             }
         } else {
-            // In-memory storage
+            // In-memory storage (development only)
             user = studentManagementMemory.find(s =>
-                (s.enrollmentNo === id || s.email === id) && s.password === password
+                (s.enrollmentNo === sanitizedId || s.email === sanitizedId) && s.password === password
             );
 
             if (user) {
@@ -3488,7 +3600,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             }
 
             user = teachersMemory.find(t =>
-                (t.employeeId === id || t.email === id) && t.password === password
+                (t.employeeId === sanitizedId || t.email === sanitizedId) && t.password === password
             );
 
             if (user) {
@@ -3503,12 +3615,12 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             }
         }
 
-        console.log('Login failed for:', id);
+        console.log('Login failed for:', sanitizedId);
         res.json({ success: false, message: 'Invalid ID or password' });
 
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: 'Login failed' });
     }
 });
 
@@ -4584,12 +4696,11 @@ app.get('/api/attendance/authorized-bssid/:studentId', async (req, res) => {
         const { studentId } = req.params;
 
         // Get student's current lecture info
-        const student = await StudentManagement.findOne({
-            $or: [
-                { _id: studentId },
-                { enrollmentNo: studentId }
-            ]
-        });
+        const orConditions = [{ enrollmentNo: studentId }];
+        if (studentId.match(/^[0-9a-fA-F]{24}$/)) {
+            orConditions.push({ _id: studentId });
+        }
+        const student = await StudentManagement.findOne({ $or: orConditions });
 
         if (!student || !student.attendanceSession || !student.attendanceSession.currentClass) {
             return res.json({
@@ -4773,32 +4884,64 @@ app.post('/api/attendance/sync-offline', async (req, res) => {
             });
         }
 
-        // Calculate accepted offline time (apply business rules)
+        // CRITICAL: Check for failed random ring during offline period
         let acceptedSeconds = totalOfflineSeconds;
         let rejectionReason = null;
-
-        // Business rule: Maximum 2 hours offline per session
-        const maxOfflineSeconds = 2 * 60 * 60; // 2 hours
-        if (totalOfflineSeconds > maxOfflineSeconds) {
-            acceptedSeconds = maxOfflineSeconds;
-            rejectionReason = 'exceeded_max_offline_time';
+        
+        const session = student.attendanceSession;
+        if (session && session.randomRingPassed === false) {
+            // Random ring FAILED - apply timer cutoff
+            const randomRingTime = new Date(session.randomRingTime).getTime();
+            const offlineStart = new Date(offlineStartTime).getTime();
+            const offlineEnd = new Date(offlineEndTime).getTime();
+            
+            // If offline period includes or is after failed random ring
+            if (offlineEnd > randomRingTime && randomRingTime >= offlineStart) {
+                // Only count time until random ring
+                const timeUntilRandomRing = Math.floor((randomRingTime - offlineStart) / 1000);
+                acceptedSeconds = Math.max(0, timeUntilRandomRing);
+                rejectionReason = 'random_ring_failed_cutoff';
+                
+                console.log(`❌ Random ring cutoff applied for ${studentName}:`);
+                console.log(`   Random ring time: ${new Date(randomRingTime).toISOString()}`);
+                console.log(`   Offline start: ${new Date(offlineStart).toISOString()}`);
+                console.log(`   Offline end: ${new Date(offlineEnd).toISOString()}`);
+                console.log(`   Original offline: ${Math.floor(totalOfflineSeconds / 60)} min`);
+                console.log(`   Accepted (until random ring): ${Math.floor(acceptedSeconds / 60)} min`);
+            } else if (offlineStart >= randomRingTime) {
+                // Entire offline period is after failed random ring - reject all
+                acceptedSeconds = 0;
+                rejectionReason = 'random_ring_failed_all_rejected';
+                
+                console.log(`❌ All offline time rejected - after failed random ring`);
+            }
         }
 
-        // Business rule: Must have valid lecture during offline period
-        if (!currentLecture || !currentLecture.subject) {
-            acceptedSeconds = Math.floor(acceptedSeconds * 0.5); // 50% penalty
-            rejectionReason = 'no_valid_lecture';
-        }
+        // Apply other business rules only if not already cut off by random ring
+        if (rejectionReason !== 'random_ring_failed_cutoff' && rejectionReason !== 'random_ring_failed_all_rejected') {
+            // Business rule: Maximum 2 hours offline per session
+            const maxOfflineSeconds = 2 * 60 * 60; // 2 hours
+            if (totalOfflineSeconds > maxOfflineSeconds) {
+                acceptedSeconds = maxOfflineSeconds;
+                rejectionReason = 'exceeded_max_offline_time';
+            }
 
-        // Business rule: Check for suspicious patterns in events
-        if (events && events.length > 0) {
-            const disconnectEvents = events.filter(e => e.type === 'wifi_disconnected').length;
-            const connectEvents = events.filter(e => e.type === 'wifi_connected').length;
+            // Business rule: Must have valid lecture during offline period
+            if (!currentLecture || !currentLecture.subject) {
+                acceptedSeconds = Math.floor(acceptedSeconds * 0.5); // 50% penalty
+                rejectionReason = 'no_valid_lecture';
+            }
 
-            // Too many WiFi toggles might indicate manipulation
-            if (disconnectEvents > 10 || Math.abs(disconnectEvents - connectEvents) > 5) {
-                acceptedSeconds = Math.floor(acceptedSeconds * 0.7); // 30% penalty
-                rejectionReason = 'suspicious_wifi_pattern';
+            // Business rule: Check for suspicious patterns in events
+            if (events && events.length > 0) {
+                const disconnectEvents = events.filter(e => e.type === 'wifi_disconnected').length;
+                const connectEvents = events.filter(e => e.type === 'wifi_connected').length;
+
+                // Too many WiFi toggles might indicate manipulation
+                if (disconnectEvents > 10 || Math.abs(disconnectEvents - connectEvents) > 5) {
+                    acceptedSeconds = Math.floor(acceptedSeconds * 0.7); // 30% penalty
+                    rejectionReason = 'suspicious_wifi_pattern';
+                }
             }
         }
 
@@ -4824,7 +4967,8 @@ app.post('/api/attendance/sync-offline', async (req, res) => {
             acceptedSeconds: acceptedSeconds,
             rejectionReason: rejectionReason,
             currentLecture: currentLecture,
-            eventCount: events?.length || 0
+            eventCount: events?.length || 0,
+            randomRingCutoff: rejectionReason?.includes('random_ring') || false
         });
 
         // Keep only last 10 offline syncs
@@ -4862,7 +5006,8 @@ app.post('/api/attendance/sync-offline', async (req, res) => {
             newTotalSeconds: student.attendanceSession.totalAttendedSeconds,
             message: rejectionReason ?
                 `Offline time partially accepted: ${rejectionReason}` :
-                'Offline time fully accepted'
+                'Offline time fully accepted',
+            randomRingCutoff: rejectionReason?.includes('random_ring') || false
         });
 
     } catch (error) {
@@ -5048,6 +5193,20 @@ async function loadAttendanceThreshold() {
 
 // Call on server start
 loadAttendanceThreshold();
+
+// Config Schema - Store branches and semesters
+const configSchema = new mongoose.Schema({
+    type: { type: String, required: true, enum: ['branch', 'semester'] },
+    value: { type: String, required: true },
+    displayName: { type: String },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+configSchema.index({ type: 1, value: 1 }, { unique: true });
+
+const Config = mongoose.model('Config', configSchema);
 
 // Classroom Management
 const classroomSchema = new mongoose.Schema({
@@ -5736,6 +5895,8 @@ app.post('/api/random-ring', async (req, res) => {
 
         // Create random ring record in database
         let randomRingId = null;
+        const randomRingTimestamp = new Date();
+        
         if (mongoose.connection.readyState === 1) {
             const randomRing = new RandomRing({
                 teacherId,
@@ -5752,10 +5913,11 @@ app.post('/api/random-ring', async (req, res) => {
                     name: s.name,
                     enrollmentNo: s.enrollmentNo,
                     notificationSent: true,
-                    notificationTime: new Date(),
+                    notificationTime: randomRingTimestamp,
                     verified: false
                 })),
-                status: 'pending'
+                status: 'pending',
+                createdAt: randomRingTimestamp
             });
 
             await randomRing.save();
@@ -5763,19 +5925,35 @@ app.post('/api/random-ring', async (req, res) => {
             console.log(`💾 Random ring record created: ${randomRingId}`);
         }
 
-        // PAUSE TIMER for all selected students
+        // CRITICAL: SAVE CURRENT TIMER VALUE BEFORE PAUSING
+        // This is the cutoff point - if student fails verification, timer counts only until here
         if (mongoose.connection.readyState === 1) {
-            const now = new Date();
             for (const student of selectedStudents) {
+                // Calculate current attended time
+                const session = student.attendanceSession;
+                let currentAttendedSeconds = 0;
+                
+                if (session && session.sessionStartTime) {
+                    const sessionStart = new Date(session.sessionStartTime).getTime();
+                    const sessionDuration = Math.floor((randomRingTimestamp.getTime() - sessionStart) / 1000);
+                    const pausedDuration = session.pausedDuration || 0;
+                    currentAttendedSeconds = Math.max(0, sessionDuration - pausedDuration);
+                }
+
+                console.log(`📊 Student ${student.name}: Attended ${currentAttendedSeconds}s before random ring`);
+
+                // Update student with random ring data
                 await StudentManagement.findByIdAndUpdate(student._id, {
                     'attendanceSession.isPaused': true,
                     'attendanceSession.pauseReason': 'random_ring',
-                    'attendanceSession.lastPauseTime': now,
+                    'attendanceSession.lastPauseTime': randomRingTimestamp,
                     'attendanceSession.randomRingId': randomRingId,
-                    'attendanceSession.randomRingTime': now
+                    'attendanceSession.randomRingTime': randomRingTimestamp,
+                    'attendanceSession.timeBeforeRandomRing': currentAttendedSeconds, // CRITICAL: Save cutoff time
+                    'attendanceSession.randomRingPassed': null // Reset verification status
                 });
             }
-            console.log(`⏸️  Paused timer for ${selectedStudents.length} students`);
+            console.log(`⏸️  Paused timer for ${selectedStudents.length} students with cutoff timestamps saved`);
         }
 
         // Send notifications via Socket.IO
@@ -5940,7 +6118,7 @@ app.post('/api/random-ring/verify-after-rejection', async (req, res) => {
             await randomRing.save();
             console.log(`✅ Student ${studentId} face verified after rejection for random ring ${randomRingId}`);
 
-            // Resume student timer
+            // CRITICAL: Resume student timer - FULL TIME COUNTED (face verification successful)
             const student = await StudentManagement.findOne({
                 $or: [{ _id: studentId }, { enrollmentNo: studentId }]
             });
@@ -5957,12 +6135,13 @@ app.post('/api/random-ring/verify-after-rejection', async (req, res) => {
                     'attendanceSession.pauseReason': null,
                     'attendanceSession.pausedDuration': pausedDuration + additionalPausedTime,
                     'attendanceSession.lastPauseTime': null,
+                    'attendanceSession.randomRingPassed': true, // PASSED - full time counted
                     isRunning: true,
                     status: 'attending',
                     lastUpdated: new Date()
                 });
 
-                console.log(`▶️ Timer resumed for ${student.name} - Face verified after rejection`);
+                console.log(`▶️ Timer resumed for ${student.name} - Face verified after rejection - FULL TIME COUNTED`);
 
                 // Notify teacher about face verification
                 io.emit('random_ring_face_verified_after_rejection', {
@@ -5978,7 +6157,7 @@ app.post('/api/random-ring/verify-after-rejection', async (req, res) => {
                 io.emit('random_ring_face_verification_success', {
                     studentId: student._id.toString(),
                     enrollmentNo: student.enrollmentNo,
-                    message: 'Face verification successful. Timer resumed.',
+                    message: 'Face verification successful. Timer resumed with full time counted.',
                     randomRingId: randomRingId
                 });
             }
@@ -5988,8 +6167,9 @@ app.post('/api/random-ring/verify-after-rejection', async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Face verification after rejection successful',
-            responseTime: responseTime
+            message: 'Face verification after rejection successful - Full time counted',
+            responseTime: responseTime,
+            fullTimeCounted: true
         });
 
     } catch (error) {
@@ -6084,7 +6264,7 @@ app.post('/api/random-ring/teacher-action', async (req, res) => {
                 randomRing.selectedStudents[studentIndex].verified = true;
                 randomRing.selectedStudents[studentIndex].verificationTime = now;
 
-                // Resume student timer
+                // Resume student timer - FULL TIME COUNTED
                 const student = await StudentManagement.findOne({
                     $or: [{ _id: studentId }, { enrollmentNo: studentId }]
                 });
@@ -6101,12 +6281,13 @@ app.post('/api/random-ring/teacher-action', async (req, res) => {
                         'attendanceSession.pauseReason': null,
                         'attendanceSession.pausedDuration': pausedDuration + additionalPausedTime,
                         'attendanceSession.lastPauseTime': null,
+                        'attendanceSession.randomRingPassed': true, // Mark as passed
                         isRunning: true,
                         status: 'attending',
                         lastUpdated: new Date()
                     });
 
-                    console.log(`▶️  Timer resumed for ${student.name} - Teacher accepted`);
+                    console.log(`▶️  Timer resumed for ${student.name} - Teacher accepted - FULL TIME COUNTED`);
 
                     io.emit('random_ring_teacher_accepted', {
                         studentId: student._id.toString(),
@@ -6116,18 +6297,29 @@ app.post('/api/random-ring/teacher-action', async (req, res) => {
                     });
                 }
             } else if (action === 'rejected') {
-                // Notify student to verify face
+                // CRITICAL: Mark random ring as FAILED
+                // Timer will be cut off at random ring time
                 const student = await StudentManagement.findOne({
                     $or: [{ _id: studentId }, { enrollmentNo: studentId }]
                 });
 
                 if (student) {
+                    // Mark random ring as failed - timer cutoff applied
+                    await StudentManagement.findByIdAndUpdate(student._id, {
+                        'attendanceSession.randomRingPassed': false, // FAILED - timer cutoff at random ring time
+                        'attendanceSession.isPaused': true, // Keep paused
+                        'attendanceSession.pauseReason': 'random_ring_failed'
+                    });
+
+                    console.log(`❌ Random ring FAILED for ${student.name} - Timer cutoff at ${student.attendanceSession.randomRingTime}`);
+
                     io.emit('random_ring_teacher_rejected', {
                         studentId: student._id.toString(),
                         enrollmentNo: student.enrollmentNo,
                         message: 'Teacher marked you absent. Verify your face within 5 minutes to resume timer.',
                         randomRingId: randomRingId,
-                        expiresAt: new Date(now.getTime() + 5 * 60 * 1000)
+                        expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
+                        timerCutoff: true // Indicate timer is cut off
                     });
                 }
             }
@@ -6174,13 +6366,50 @@ function validateEnvironment() {
 // Global error handlers
 process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
-    process.exit(1);
+    gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-    process.exit(1);
+    gracefulShutdown('unhandledRejection');
 });
+
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+    console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
+    
+    try {
+        // Stop accepting new connections
+        server.close(() => {
+            console.log('✅ HTTP server closed');
+        });
+        
+        // Close all socket connections
+        console.log(`🔌 Closing ${activeConnections.size} active socket connections...`);
+        activeConnections.forEach((connection, socketId) => {
+            connection.timers.forEach(timer => clearInterval(timer));
+        });
+        io.close(() => {
+            console.log('✅ Socket.IO server closed');
+        });
+        
+        // Close database connection
+        if (mongoose.connection.readyState === 1) {
+            await mongoose.connection.close();
+            console.log('✅ MongoDB connection closed');
+        }
+        
+        console.log('✅ Graceful shutdown completed');
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // All routes must be registered before starting the server
 const PORT = process.env.PORT || 3000;

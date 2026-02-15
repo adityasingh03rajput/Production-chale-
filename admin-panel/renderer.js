@@ -12,15 +12,178 @@ let teachers = [];
 let classrooms = [];
 let currentTimetable = null;
 
+// Dynamic dropdown data (fetched from server)
+let dynamicData = {
+    branches: [],
+    departments: [],
+    semesters: [1, 2, 3, 4, 5, 6, 7, 8], // Default, can be overridden
+    subjects: []
+};
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
     setupEventListeners();
     checkServerConnection();
+    
+    // Load dynamic data from server
+    loadDynamicDropdownData();
 
     // Load departments filter on page load
     loadDepartmentsFilter();
 });
+
+// Load dynamic dropdown data from server
+async function loadDynamicDropdownData() {
+    console.log('📥 Loading dynamic dropdown data from server...');
+    
+    try {
+        // Fetch branches/courses
+        const branchesResponse = await fetch(`${SERVER_URL}/api/config/branches`);
+        if (branchesResponse.ok) {
+            const branchesData = await branchesResponse.json();
+            if (branchesData.success && branchesData.branches) {
+                dynamicData.branches = branchesData.branches.map(b => ({
+                    value: b.name,
+                    label: b.displayName || b.name
+                }));
+                console.log(`✅ Loaded ${dynamicData.branches.length} branches`);
+            }
+        }
+        
+        // Fetch semesters
+        const semestersResponse = await fetch(`${SERVER_URL}/api/config/semesters`);
+        if (semestersResponse.ok) {
+            const semestersData = await semestersResponse.json();
+            if (semestersData.success && semestersData.semesters) {
+                dynamicData.semesters = semestersData.semesters;
+                console.log(`✅ Loaded ${dynamicData.semesters.length} semesters`);
+            }
+        }
+        
+        // Extract unique departments from teachers
+        const teachersResponse = await fetch(`${SERVER_URL}/api/teachers`);
+        if (teachersResponse.ok) {
+            const teachersData = await teachersResponse.json();
+            if (teachersData.success && teachersData.teachers) {
+                const depts = new Set(teachersData.teachers.map(t => t.department).filter(d => d));
+                dynamicData.departments = Array.from(depts).map(d => ({
+                    value: d,
+                    label: d
+                }));
+                console.log(`✅ Loaded ${dynamicData.departments.length} departments`);
+            }
+        }
+        
+        // If no data from server, use defaults
+        if (dynamicData.branches.length === 0) {
+            console.log('⚠️ No branches from server, using defaults');
+            dynamicData.branches = [
+                { value: 'B.Tech Data Science', label: 'Data Science' },
+                { value: 'CSE', label: 'Computer Science' },
+                { value: 'ECE', label: 'Electronics' },
+                { value: 'ME', label: 'Mechanical' },
+                { value: 'CE', label: 'Civil' }
+            ];
+        }
+        
+        if (dynamicData.departments.length === 0) {
+            console.log('⚠️ No departments from server, using defaults');
+            dynamicData.departments = [
+                { value: 'CSE', label: 'Computer Science' },
+                { value: 'ECE', label: 'Electronics' },
+                { value: 'ME', label: 'Mechanical' },
+                { value: 'CE', label: 'Civil' }
+            ];
+        }
+        
+        console.log('✅ Dynamic dropdown data loaded');
+        
+        // Populate filter dropdowns after data is loaded
+        populateFilterDropdowns();
+        
+    } catch (error) {
+        console.error('❌ Error loading dynamic data:', error);
+        // Use defaults on error
+        dynamicData.branches = [
+            { value: 'B.Tech Data Science', label: 'Data Science' },
+            { value: 'CSE', label: 'Computer Science' },
+            { value: 'ECE', label: 'Electronics' },
+            { value: 'ME', label: 'Mechanical' },
+            { value: 'CE', label: 'Civil' }
+        ];
+        dynamicData.departments = [
+            { value: 'CSE', label: 'Computer Science' },
+            { value: 'ECE', label: 'Electronics' },
+            { value: 'ME', label: 'Mechanical' },
+            { value: 'CE', label: 'Civil' }
+        ];
+        
+        // Populate filter dropdowns even with defaults
+        populateFilterDropdowns();
+    }
+}
+
+// Helper function to generate branch dropdown options
+function generateBranchOptions(selectedValue = '') {
+    return dynamicData.branches.map(branch => 
+        `<option value="${branch.value}" ${selectedValue === branch.value ? 'selected' : ''}>${branch.label}</option>`
+    ).join('');
+}
+
+// Helper function to generate department dropdown options
+function generateDepartmentOptions(selectedValue = '') {
+    return dynamicData.departments.map(dept => 
+        `<option value="${dept.value}" ${selectedValue === dept.value ? 'selected' : ''}>${dept.label}</option>`
+    ).join('');
+}
+
+// Helper function to generate semester dropdown options
+function generateSemesterOptions(selectedValue = '') {
+    return dynamicData.semesters.map(sem => 
+        `<option value="${sem}" ${selectedValue == sem ? 'selected' : ''}>${sem}</option>`
+    ).join('');
+}
+
+// Populate all filter dropdowns on page load
+function populateFilterDropdowns() {
+    console.log('🔄 Populating filter dropdowns...');
+    
+    // Timetable filters
+    const timetableSemester = document.getElementById('timetableSemester');
+    if (timetableSemester) {
+        timetableSemester.innerHTML = '<option value="">Select Semester</option>' + generateSemesterOptions();
+    }
+    
+    const timetableCourse = document.getElementById('timetableCourse');
+    if (timetableCourse) {
+        timetableCourse.innerHTML = '<option value="">Select Branch</option>' + generateBranchOptions();
+    }
+    
+    // Attendance filters
+    const attendanceCourseFilter = document.getElementById('attendanceCourseFilter');
+    if (attendanceCourseFilter) {
+        attendanceCourseFilter.innerHTML = '<option value="">-- Select Branch --</option>' + generateBranchOptions();
+    }
+    
+    const attendanceSemesterFilter = document.getElementById('attendanceSemesterFilter');
+    if (attendanceSemesterFilter) {
+        attendanceSemesterFilter.innerHTML = '<option value="">-- Select Semester --</option>' + generateSemesterOptions();
+    }
+    
+    // Subject filters
+    const subjectSemesterFilter = document.getElementById('subjectSemesterFilter');
+    if (subjectSemesterFilter) {
+        subjectSemesterFilter.innerHTML = '<option value="">All Semesters</option>' + generateSemesterOptions();
+    }
+    
+    const subjectBranchFilter = document.getElementById('subjectBranchFilter');
+    if (subjectBranchFilter) {
+        subjectBranchFilter.innerHTML = '<option value="">All Branches</option>' + generateBranchOptions();
+    }
+    
+    console.log('✅ Filter dropdowns populated');
+}
 
 function initializeApp() {
     loadSettings();
@@ -457,19 +620,15 @@ function showAddStudentModal() {
             <div class="form-group">
                 <label>Course *</label>
                 <select name="course" class="form-select" required>
-                    <option value="">Select Course</option>
-                    <option value="B.Tech Data Science">Data Science</option>
-                    <option value="CSE">Computer Science</option>
-                    <option value="ECE">Electronics</option>
-                    <option value="ME">Mechanical</option>
-                    <option value="CE">Civil</option>
+                    <option value="">Select Branch</option>
+                    ${generateBranchOptions()}
                 </select>
             </div>
             <div class="form-group">
                 <label>Semester *</label>
                 <select name="semester" class="form-select" required>
                     <option value="">Select Semester</option>
-                    ${[1, 2, 3, 4, 5, 6, 7, 8].map(s => `<option value="${s}">${s}</option>`).join('')}
+                    ${generateSemesterOptions()}
                 </select>
             </div>
             <div class="form-group">
@@ -867,10 +1026,7 @@ function showAddTeacherModal() {
                 <label>Department *</label>
                 <select name="department" class="form-select" required>
                     <option value="">Select Department</option>
-                    <option value="CSE">Computer Science</option>
-                    <option value="ECE">Electronics</option>
-                    <option value="ME">Mechanical</option>
-                    <option value="CE">Civil</option>
+                    ${generateDepartmentOptions()}
                 </select>
             </div>
             <div class="form-group">
@@ -2822,17 +2978,13 @@ async function editStudent(id) {
             <div class="form-group">
                 <label>Course *</label>
                 <select name="course" class="form-select" required>
-                    <option value="B.Tech Data Science" ${student.branch === 'B.Tech Data Science' ? 'selected' : ''}>Data Science</option>
-                    <option value="CSE" ${student.branch === 'CSE' ? 'selected' : ''}>Computer Science</option>
-                    <option value="ECE" ${student.branch === 'ECE' ? 'selected' : ''}>Electronics</option>
-                    <option value="ME" ${student.branch === 'ME' ? 'selected' : ''}>Mechanical</option>
-                    <option value="CE" ${student.branch === 'CE' ? 'selected' : ''}>Civil</option>
+                    ${generateCourseOptions(student.branch)}
                 </select>
             </div>
             <div class="form-group">
                 <label>Semester *</label>
                 <select name="semester" class="form-select" required>
-                    ${[1, 2, 3, 4, 5, 6, 7, 8].map(s => `<option value="${s}" ${student.semester == s ? 'selected' : ''}>${s}</option>`).join('')}
+                    ${generateSemesterOptions(student.semester)}
                 </select>
             </div>
             <div class="form-group">
@@ -2972,10 +3124,7 @@ async function editTeacher(id) {
             <div class="form-group">
                 <label>Department *</label>
                 <select name="department" class="form-select" required>
-                    <option value="CSE" ${teacher.department === 'CSE' ? 'selected' : ''}>Computer Science</option>
-                    <option value="ECE" ${teacher.department === 'ECE' ? 'selected' : ''}>Electronics</option>
-                    <option value="ME" ${teacher.department === 'ME' ? 'selected' : ''}>Mechanical</option>
-                    <option value="CE" ${teacher.department === 'CE' ? 'selected' : ''}>Civil</option>
+                    ${generateDepartmentOptions(teacher.department)}
                 </select>
             </div>
             <div class="form-group">
@@ -4153,24 +4302,15 @@ function duplicateTimetable() {
             <div class="form-group">
                 <label>Target Semester:</label>
                 <select name="semester" class="form-select">
-                    <option value="1">Semester 1</option>
-                    <option value="2">Semester 2</option>
-                    <option value="3">Semester 3</option>
-                    <option value="4">Semester 4</option>
-                    <option value="5">Semester 5</option>
-                    <option value="6">Semester 6</option>
-                    <option value="7">Semester 7</option>
-                    <option value="8">Semester 8</option>
+                    <option value="">Select Semester</option>
+                    ${generateSemesterOptions()}
                 </select>
             </div>
             <div class="form-group">
                 <label>Target Course:</label>
                 <select name="course" class="form-select">
-                    <option value="B.Tech Data Science">Data Science</option>
-                    <option value="CSE">Computer Science</option>
-                    <option value="ECE">Electronics</option>
-                    <option value="ME">Mechanical</option>
-                    <option value="CE">Civil</option>
+                    <option value="">Select Branch</option>
+                    ${generateBranchOptions()}
                 </select>
             </div>
             <div class="form-actions">
@@ -7377,14 +7517,7 @@ function showAddSubjectDialog() {
                             <label for="semester">Semester</label>
                             <select id="semester" name="semester" required>
                                 <option value="">-- Select Semester --</option>
-                                <option value="1">Semester 1</option>
-                                <option value="2">Semester 2</option>
-                                <option value="3">Semester 3</option>
-                                <option value="4">Semester 4</option>
-                                <option value="5">Semester 5</option>
-                                <option value="6">Semester 6</option>
-                                <option value="7">Semester 7</option>
-                                <option value="8">Semester 8</option>
+                                ${generateSemesterOptions()}
                             </select>
                             <div class="validation-message" id="semesterError"></div>
                         </div>
@@ -7392,13 +7525,7 @@ function showAddSubjectDialog() {
                             <label for="branch">Branch</label>
                             <select id="branch" name="branch" required>
                                 <option value="">-- Select Branch --</option>
-                                <option value="B.Tech Computer Science">Computer Science (CS)</option>
-                                <option value="B.Tech Data Science">Data Science (DS)</option>
-                                <option value="B.Tech Information Technology">Information Technology (IT)</option>
-                                <option value="B.Tech Artificial Intelligence">Artificial Intelligence (AI)</option>
-                                <option value="B.Tech Electronics">Electronics (EC)</option>
-                                <option value="B.Tech Mechanical">Mechanical (ME)</option>
-                                <option value="B.Tech Civil">Civil (CE)</option>
+                                ${generateBranchOptions()}
                             </select>
                             <div class="validation-message" id="branchError"></div>
                         </div>
@@ -7707,19 +7834,13 @@ async function editSubject(subjectCode) {
                             <div class="form-group">
                                 <label>Semester *</label>
                                 <select id="editSemester" required>
-                                    ${[1, 2, 3, 4, 5, 6, 7, 8].map(s => `<option value="${s}" ${s == subject.semester ? 'selected' : ''}>Semester ${s}</option>`).join('')}
+                                    ${dynamicData.semesters.map(s => `<option value="${s}" ${s == subject.semester ? 'selected' : ''}>Semester ${s}</option>`).join('')}
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>Branch *</label>
                                 <select id="editBranch" required>
-                                    <option value="B.Tech Computer Science" ${subject.branch === 'B.Tech Computer Science' ? 'selected' : ''}>Computer Science (CS)</option>
-                                    <option value="B.Tech Data Science" ${subject.branch === 'B.Tech Data Science' ? 'selected' : ''}>Data Science (DS)</option>
-                                    <option value="B.Tech Information Technology" ${subject.branch === 'B.Tech Information Technology' ? 'selected' : ''}>Information Technology (IT)</option>
-                                    <option value="B.Tech Artificial Intelligence" ${subject.branch === 'B.Tech Artificial Intelligence' ? 'selected' : ''}>Artificial Intelligence (AI)</option>
-                                    <option value="B.Tech Electronics" ${subject.branch === 'B.Tech Electronics' ? 'selected' : ''}>Electronics (EC)</option>
-                                    <option value="B.Tech Mechanical" ${subject.branch === 'B.Tech Mechanical' ? 'selected' : ''}>Mechanical (ME)</option>
-                                    <option value="B.Tech Civil" ${subject.branch === 'B.Tech Civil' ? 'selected' : ''}>Civil (CE)</option>
+                                    ${dynamicData.branches.map(c => `<option value="${c.value}" ${c.value === subject.branch ? 'selected' : ''}>${c.label}</option>`).join('')}
                                 </select>
                             </div>
                         </div>
@@ -7857,20 +7978,14 @@ async function duplicateSubject(subjectCode) {
                     <label>Semester *</label>
                     <select id="newSemester" class="form-select" required>
                         <option value="">Select Semester</option>
-                        ${[1, 2, 3, 4, 5, 6, 7, 8].map(s => `<option value="${s}" ${s == subject.semester ? 'selected' : ''}>Semester ${s}</option>`).join('')}
+                        ${dynamicData.semesters.map(s => `<option value="${s}" ${s == subject.semester ? 'selected' : ''}>Semester ${s}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Branch *</label>
                     <select id="newBranch" class="form-select" required>
                         <option value="">Select Branch</option>
-                        <option value="B.Tech Computer Science" ${subject.branch === 'B.Tech Computer Science' ? 'selected' : ''}>Computer Science (CS)</option>
-                        <option value="B.Tech Data Science" ${subject.branch === 'B.Tech Data Science' ? 'selected' : ''}>Data Science (DS)</option>
-                        <option value="B.Tech Information Technology" ${subject.branch === 'B.Tech Information Technology' ? 'selected' : ''}>Information Technology (IT)</option>
-                        <option value="B.Tech Artificial Intelligence" ${subject.branch === 'B.Tech Artificial Intelligence' ? 'selected' : ''}>Artificial Intelligence (AI)</option>
-                        <option value="B.Tech Electronics" ${subject.branch === 'B.Tech Electronics' ? 'selected' : ''}>Electronics (EC)</option>
-                        <option value="B.Tech Mechanical" ${subject.branch === 'B.Tech Mechanical' ? 'selected' : ''}>Mechanical (ME)</option>
-                        <option value="B.Tech Civil" ${subject.branch === 'B.Tech Civil' ? 'selected' : ''}>Civil (CE)</option>
+                        ${dynamicData.branches.map(c => `<option value="${c.value}" ${c.value === subject.branch ? 'selected' : ''}>${c.label}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-actions">
@@ -8521,13 +8636,7 @@ function showSimpleAddSubjectDialog() {
                     <label>Branch *</label>
                     <select id="simpleBranch" required>
                         <option value="">Select Branch</option>
-                        <option value="B.Tech Computer Science">Computer Science (CS)</option>
-                        <option value="B.Tech Data Science">Data Science (DS)</option>
-                        <option value="B.Tech Information Technology">Information Technology (IT)</option>
-                        <option value="B.Tech Artificial Intelligence">Artificial Intelligence (AI)</option>
-                        <option value="B.Tech Electronics">Electronics (EC)</option>
-                        <option value="B.Tech Mechanical">Mechanical (ME)</option>
-                        <option value="B.Tech Civil">Civil (CE)</option>
+                        ${dynamicData.branches.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
@@ -8665,14 +8774,7 @@ function showBulkEditDialog() {
                     </label>
                     <select id="bulkSemester" disabled>
                         <option value="">Select Semester</option>
-                        <option value="1">Semester 1</option>
-                        <option value="2">Semester 2</option>
-                        <option value="3">Semester 3</option>
-                        <option value="4">Semester 4</option>
-                        <option value="5">Semester 5</option>
-                        <option value="6">Semester 6</option>
-                        <option value="7">Semester 7</option>
-                        <option value="8">Semester 8</option>
+                        ${generateSemesterOptions()}
                     </select>
                 </div>
                 
@@ -8682,13 +8784,7 @@ function showBulkEditDialog() {
                     </label>
                     <select id="bulkBranch" disabled>
                         <option value="">Select Branch</option>
-                        <option value="B.Tech Computer Science">Computer Science (CS)</option>
-                        <option value="B.Tech Data Science">Data Science (DS)</option>
-                        <option value="B.Tech Information Technology">Information Technology (IT)</option>
-                        <option value="B.Tech Artificial Intelligence">Artificial Intelligence (AI)</option>
-                        <option value="B.Tech Electronics">Electronics (EC)</option>
-                        <option value="B.Tech Mechanical">Mechanical (ME)</option>
-                        <option value="B.Tech Civil">Civil (CE)</option>
+                        ${generateBranchOptions()}
                     </select>
                 </div>
                 
@@ -9344,4 +9440,248 @@ function setupBulkAttendanceCheckboxes() {
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initializeAttendanceManagement, 1000);
+});
+
+
+// ==================== CONFIGURATION MANAGEMENT ====================
+
+// Load branches configuration
+async function loadBranchesConfig() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/config/branches`);
+        const data = await response.json();
+        
+        const container = document.getElementById('branchesListContainer');
+        
+        if (!data.success || data.branches.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No branches configured</div>';
+            return;
+        }
+        
+        container.innerHTML = data.branches.map(branch => `
+            <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div>
+                    <div style="font-weight: 500; color: var(--text-primary);">${branch.displayName}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${branch.name}</div>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="deleteBranch('${branch.id}', '${branch.name}')">🗑️</button>
+            </div>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error loading branches:', error);
+        showNotification('Failed to load branches', 'error');
+    }
+}
+
+// Load semesters configuration
+async function loadSemestersConfig() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/config/semesters`);
+        const data = await response.json();
+        
+        const container = document.getElementById('semestersListContainer');
+        
+        if (!data.success || data.semesters.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">No semesters configured</div>';
+            return;
+        }
+        
+        container.innerHTML = data.semesters.map(semester => `
+            <div class="config-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="font-weight: 500; color: var(--text-primary);">Semester ${semester}</div>
+                <button class="btn btn-danger btn-sm" onclick="deleteSemester('${semester}')">🗑️</button>
+            </div>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error loading semesters:', error);
+        showNotification('Failed to load semesters', 'error');
+    }
+}
+
+// Add branch modal
+function showAddBranchModal() {
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <h2>➕ Add New Branch</h2>
+        <form id="addBranchForm">
+            <div class="form-group">
+                <label>Branch Name *</label>
+                <input type="text" id="branchValue" class="form-input" placeholder="e.g., B.Tech Data Science" required>
+            </div>
+            <div class="form-group">
+                <label>Display Name *</label>
+                <input type="text" id="branchDisplayName" class="form-input" placeholder="e.g., Data Science" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Branch</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('addBranchForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const value = document.getElementById('branchValue').value.trim();
+        const displayName = document.getElementById('branchDisplayName').value.trim();
+        
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config/branches`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value, displayName })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('Branch added successfully', 'success');
+                closeModal();
+                loadBranchesConfig();
+                loadDynamicDropdownData(); // Refresh dropdowns
+            } else {
+                showNotification(data.error || 'Failed to add branch', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding branch:', error);
+            showNotification('Failed to add branch', 'error');
+        }
+    });
+    
+    openModal();
+}
+
+// Add semester modal
+function showAddSemesterModal() {
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <h2>➕ Add New Semester</h2>
+        <form id="addSemesterForm">
+            <div class="form-group">
+                <label>Semester Number *</label>
+                <input type="number" id="semesterValue" class="form-input" placeholder="e.g., 9" min="1" max="12" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Semester</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    `;
+    
+    document.getElementById('addSemesterForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const value = document.getElementById('semesterValue').value;
+        
+        try {
+            const response = await fetch(`${SERVER_URL}/api/config/semesters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('Semester added successfully', 'success');
+                closeModal();
+                loadSemestersConfig();
+                loadDynamicDropdownData(); // Refresh dropdowns
+            } else {
+                showNotification(data.error || 'Failed to add semester', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding semester:', error);
+            showNotification('Failed to add semester', 'error');
+        }
+    });
+    
+    openModal();
+}
+
+// Delete branch
+async function deleteBranch(branchId, branchName) {
+    if (!confirm(`Are you sure you want to delete branch "${branchName}"?\n\nThis will not delete existing students or timetables.`)) {
+        return;
+    }
+    
+    try {
+        const deleteResponse = await fetch(`${SERVER_URL}/api/config/branches/${encodeURIComponent(branchName)}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await deleteResponse.json();
+        
+        if (data.success) {
+            showNotification('Branch deleted successfully', 'success');
+            loadBranchesConfig();
+            loadDynamicDropdownData(); // Refresh dropdowns
+        } else {
+            showNotification(data.error || 'Failed to delete branch', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting branch:', error);
+        showNotification('Failed to delete branch', 'error');
+    }
+}
+
+// Delete semester
+async function deleteSemester(semesterValue) {
+    if (!confirm(`Are you sure you want to delete Semester ${semesterValue}?\n\nThis will not delete existing students or timetables.`)) {
+        return;
+    }
+    
+    try {
+        const deleteResponse = await fetch(`${SERVER_URL}/api/config/semesters/${semesterValue}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await deleteResponse.json();
+        
+        if (data.success) {
+            showNotification('Semester deleted successfully', 'success');
+            loadSemestersConfig();
+            loadDynamicDropdownData(); // Refresh dropdowns
+        } else {
+            showNotification(data.error || 'Failed to delete semester', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting semester:', error);
+        showNotification('Failed to delete semester', 'error');
+    }
+}
+
+// Setup configuration event listeners
+function setupConfigListeners() {
+    const addBranchBtn = document.getElementById('addBranchBtn');
+    if (addBranchBtn) {
+        addBranchBtn.addEventListener('click', showAddBranchModal);
+    }
+    
+    const addSemesterBtn = document.getElementById('addSemesterBtn');
+    if (addSemesterBtn) {
+        addSemesterBtn.addEventListener('click', showAddSemesterModal);
+    }
+}
+
+// Load config when config section is opened
+document.addEventListener('DOMContentLoaded', () => {
+    setupConfigListeners();
+    
+    // Load config when Settings section becomes active
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.target.id === 'settings-section' && mutation.target.classList.contains('active')) {
+                loadBranchesConfig();
+                loadSemestersConfig();
+            }
+        });
+    });
+    
+    const settingsSection = document.getElementById('settings-section');
+    if (settingsSection) {
+        observer.observe(settingsSection, { attributes: true, attributeFilter: ['class'] });
+    }
 });
