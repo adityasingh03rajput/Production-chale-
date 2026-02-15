@@ -3189,45 +3189,19 @@ app.get('/api/time', (req, res) => {
 app.get('/api/config/branches', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
-            // Get branches from Config collection
-            const configBranches = await Config.find({ type: 'branch', isActive: true }).sort({ value: 1 });
+            const branches = await getBranchesFromConfig();
             
-            if (configBranches.length > 0) {
-                // Use Config collection data
-                const branchList = configBranches.map(branch => ({
-                    id: branch.value.toLowerCase().replace(/\s+/g, '-'),
-                    name: branch.value,
-                    displayName: branch.displayName || branch.value
-                }));
-                
-                return res.json({
-                    success: true,
-                    branches: branchList,
-                    count: branchList.length
-                });
-            }
-            
-            // Fallback: Get unique branches from StudentManagement collection
-            const branches = await StudentManagement.distinct('course');
-
-            // Format branches with metadata
-            const branchList = branches.map(branch => ({
-                id: branch.toLowerCase().replace(/\s+/g, '-'),
-                name: branch,
-                displayName: branch
-            }));
-
             res.json({
                 success: true,
-                branches: branchList,
-                count: branchList.length
+                branches: branches,
+                count: branches.length
             });
         } else {
             // Fallback to default branches
             res.json({
                 success: true,
                 branches: [
-                    { id: 'b-tech-data-science', name: 'B.Tech Data Science', displayName: 'Data Science' }
+                    { id: 'b-tech-data-science', name: 'B.Tech Data Science', displayName: 'Data Science', value: 'B.Tech Data Science' }
                 ],
                 count: 1
             });
@@ -3242,30 +3216,12 @@ app.get('/api/config/branches', async (req, res) => {
 app.get('/api/config/semesters', async (req, res) => {
     try {
         if (mongoose.connection.readyState === 1) {
-            // Get semesters from Config collection
-            const configSemesters = await Config.find({ type: 'semester', isActive: true }).sort({ value: 1 });
+            const semesters = await getSemestersFromConfig();
             
-            if (configSemesters.length > 0) {
-                // Use Config collection data
-                const semesterList = configSemesters.map(sem => sem.value);
-                
-                return res.json({
-                    success: true,
-                    semesters: semesterList,
-                    count: semesterList.length
-                });
-            }
-            
-            // Fallback: Get unique semesters from StudentManagement collection
-            const semesters = await StudentManagement.distinct('semester');
-
-            // Sort numerically
-            const sortedSemesters = semesters.sort((a, b) => parseInt(a) - parseInt(b));
-
             res.json({
                 success: true,
-                semesters: sortedSemesters,
-                count: sortedSemesters.length
+                semesters: semesters,
+                count: semesters.length
             });
         } else {
             // Fallback to default semesters
@@ -3438,17 +3394,11 @@ app.get('/api/config/academic-year', async (req, res) => {
 // Get app configuration (all dynamic settings)
 app.get('/api/config/app', async (req, res) => {
     try {
-        // Get branches
-        const branches = await StudentManagement.distinct('course');
-        const branchList = branches.map(branch => ({
-            id: branch.toLowerCase().replace(/\s+/g, '-'),
-            name: branch,
-            displayName: branch
-        }));
+        // Get branches from Config collection
+        const branches = await getBranchesFromConfig();
 
-        // Get semesters
-        const semesters = await StudentManagement.distinct('semester');
-        const sortedSemesters = semesters.sort((a, b) => parseInt(a) - parseInt(b));
+        // Get semesters from Config collection
+        const semesters = await getSemestersFromConfig();
 
         // Calculate academic year
         const now = new Date();
@@ -3462,8 +3412,8 @@ app.get('/api/config/app', async (req, res) => {
                 appName: 'LetsBunk',
                 version: '2.1.0',
                 academicYear,
-                branches: branchList,
-                semesters: sortedSemesters,
+                branches: branches,
+                semesters: semesters,
                 features: {
                     faceVerification: true,
                     randomRing: true,
@@ -5207,6 +5157,51 @@ const configSchema = new mongoose.Schema({
 configSchema.index({ type: 1, value: 1 }, { unique: true });
 
 const Config = mongoose.model('Config', configSchema);
+
+// Helper functions to get branches and semesters from Config collection
+async function getBranchesFromConfig() {
+    try {
+        const configBranches = await Config.find({ type: 'branch', isActive: true }).sort({ value: 1 });
+        
+        if (configBranches.length > 0) {
+            return configBranches.map(branch => ({
+                id: branch.value.toLowerCase().replace(/\s+/g, '-'),
+                name: branch.value,
+                displayName: branch.displayName || branch.value,
+                value: branch.value
+            }));
+        }
+        
+        // Fallback: Get unique branches from StudentManagement collection
+        const branches = await StudentManagement.distinct('course');
+        return branches.map(branch => ({
+            id: branch.toLowerCase().replace(/\s+/g, '-'),
+            name: branch,
+            displayName: branch,
+            value: branch
+        }));
+    } catch (error) {
+        console.error('Error getting branches:', error);
+        return [{ id: 'b-tech-data-science', name: 'B.Tech Data Science', displayName: 'Data Science', value: 'B.Tech Data Science' }];
+    }
+}
+
+async function getSemestersFromConfig() {
+    try {
+        const configSemesters = await Config.find({ type: 'semester', isActive: true }).sort({ value: 1 });
+        
+        if (configSemesters.length > 0) {
+            return configSemesters.map(sem => sem.value);
+        }
+        
+        // Fallback: Get unique semesters from StudentManagement collection
+        const semesters = await StudentManagement.distinct('semester');
+        return semesters.sort((a, b) => parseInt(a) - parseInt(b));
+    } catch (error) {
+        console.error('Error getting semesters:', error);
+        return ['1', '2', '3', '4', '5', '6', '7', '8'];
+    }
+}
 
 // Classroom Management
 const classroomSchema = new mongoose.Schema({
