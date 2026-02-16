@@ -169,7 +169,7 @@ async function createDatabaseIndexes() {
         // StudentManagement indexes
         await StudentManagement.collection.createIndex({ enrollmentNo: 1 }, { unique: true });
         await StudentManagement.collection.createIndex({ email: 1 });
-        await StudentManagement.collection.createIndex({ semester: 1, course: 1 });
+        await StudentManagement.collection.createIndex({ semester: 1, branch: 1 });
         await StudentManagement.collection.createIndex({ isRunning: 1 });
 
         // AttendanceSession indexes
@@ -1051,7 +1051,7 @@ app.get('/api/teacher-schedule/:teacherId/:day', async (req, res) => {
                             startTime: tt.periods[idx]?.startTime || '',
                             endTime: tt.periods[idx]?.endTime || '',
                             period: idx + 1,
-                            course: tt.branch,
+                            branch: tt.branch,
                             semester: tt.semester,
                             day: day
                         });
@@ -1212,7 +1212,7 @@ app.get('/api/teacher/current-class-students/:teacherId', async (req, res) => {
         // Get students for this class (semester + branch) with current attendance status
         const students = await StudentManagement.find({
             semester: currentClass.semester.toString(),
-            course: currentClass.branch
+            branch: currentClass.branch
         }).select('-password');
 
         console.log(`👥 Found ${students.length} students for ${currentClass.branch} Semester ${currentClass.semester}`);
@@ -1620,7 +1620,7 @@ setInterval(async () => {
                 const studentId = student._id.toString();
 
                 // Get current lecture info from timetable
-                const lectureInfo = await getCurrentLectureInfo(student.semester, student.course);
+                const lectureInfo = await getCurrentLectureInfo(student.semester, student.branch);
 
                 if (!lectureInfo) {
                     // No active lecture, stop timer and save final attendance
@@ -1695,7 +1695,7 @@ setInterval(async () => {
                                 studentName: student.name,
                                 date: today,
                                 semester: student.semester,
-                                branch: student.course,
+                                branch: student.branch,
                                 periods: []
                             });
                         }
@@ -1746,7 +1746,7 @@ setInterval(async () => {
                     enrollmentNo: student.enrollmentNo,
                     name: student.name,
                     semester: student.semester,
-                    branch: student.course,
+                    branch: student.branch,
 
                     // Lecture info
                     lectureSubject: lectureInfo.subject,
@@ -3603,7 +3603,6 @@ app.post('/api/login', loginLimiter, async (req, res) => {
                             name: user.name,
                             email: user.email,
                             enrollmentNo: user.enrollmentNo,
-                            course: user.branch,
                             branch: user.branch,
                             semester: user.semester,
                             phone: user.phone,
@@ -5288,7 +5287,7 @@ async function getBranchesFromConfig() {
         }
 
         // Fallback: Get unique branches from StudentManagement collection
-        const branches = await StudentManagement.distinct('course');
+        const branches = await StudentManagement.distinct('branch');
         return branches.map(branch => ({
             id: branch.toLowerCase().replace(/\s+/g, '-'),
             name: branch,
@@ -5502,7 +5501,7 @@ app.get('/api/attendance/history/:enrollmentNo', async (req, res) => {
                 student: {
                     enrollmentNo: student.enrollmentNo,
                     name: student.name,
-                    course: student.course,
+                    branch: student.branch,
                     semester: student.semester
                 }
             });
@@ -5525,7 +5524,7 @@ app.get('/api/attendance/history/:enrollmentNo', async (req, res) => {
                 student: {
                     enrollmentNo,
                     name: 'Unknown',
-                    course: 'Unknown',
+                    branch: 'Unknown',
                     semester: 'Unknown'
                 }
             });
@@ -5999,7 +5998,7 @@ app.post('/api/random-ring', async (req, res) => {
         if (mongoose.connection.readyState === 1) {
             const query = {};
             if (semester) query.semester = semester;
-            if (branch) query.course = branch;
+            if (branch) query.branch = branch;
 
             students = await StudentManagement.find(query);
         } else {
@@ -6660,7 +6659,7 @@ app.get('/api/attendance/manage', async (req, res) => {
 
         // Fetch records with student details
         const records = await AttendanceRecord.find(query)
-            .populate('studentId', 'name enrollmentNo course semester photoUrl')
+            .populate('studentId', 'name enrollmentNo branch semester photoUrl')
             .sort({ date: -1, createdAt: -1 })
             .limit(1000); // Limit for performance
 
@@ -6733,7 +6732,7 @@ app.post('/api/attendance/manage', async (req, res) => {
             hoursAttended: hoursAttended || 0,
             notes: notes,
             semester: student.semester,
-            branch: student.course,
+            branch: student.branch,
             createdAt: new Date(),
             updatedAt: new Date()
         });
@@ -6998,7 +6997,7 @@ app.get('/api/attendance/export', async (req, res) => {
                     dayOfWeek: { $dayOfWeek: '$date' },
                     studentId: 1,
                     studentName: '$studentDetails.name',
-                    course: '$studentDetails.course',
+                    branch: '$studentDetails.branch',
                     semester: 1,
                     subjectCode: '$subject.code',
                     subjectName: '$subject.name',
@@ -7066,7 +7065,7 @@ app.get('/api/attendance/all', async (req, res) => {
         const attendanceRecords = await AttendanceHistory.find({
             date: { $gte: thirtyDaysAgo }
         })
-            .populate('studentId', 'name course semester')
+            .populate('studentId', 'name branch semester')
             .populate('teacherId', 'name')
             .sort({ date: -1 })
             .limit(1000); // Limit to prevent memory issues
@@ -7075,7 +7074,7 @@ app.get('/api/attendance/all', async (req, res) => {
             date: record.date ? record.date.toISOString().split('T')[0] : '',
             studentId: record.studentId?.enrollmentNo || record.studentId,
             studentName: record.studentId?.name || '',
-            course: record.studentId?.course || '',
+            branch: record.studentId?.branch || '',
             semester: record.semester || '',
             subjectCode: record.subject?.code || '',
             subjectName: record.subject?.name || '',

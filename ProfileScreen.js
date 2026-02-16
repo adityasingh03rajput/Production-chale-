@@ -119,8 +119,8 @@ export default function ProfileScreen({
             <>
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Course:</Text>
-                <Text style={[styles.detailValue, { color: theme.text }]}>
-                  {userData?.course || 'N/A'}
+                <Text style={[styles.detailValue, { color: theme.text }]}> 
+                  {userData?.course || userData?.branch || 'N/A'}
                 </Text>
               </View>
 

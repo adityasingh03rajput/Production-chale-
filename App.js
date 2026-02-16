@@ -65,6 +65,18 @@ const DAILY_VERIFICATION_KEY = '@daily_verification';
 // Initialize ServerTime at module load so getServerTime() never throws before useEffect runs
 initializeServerTime(SOCKET_URL);
 
+const normalizeStudentUserData = (user) => {
+  if (!user || user.role !== 'student') return user;
+  const normalizedBranch = user.branch ?? user.course ?? '';
+  const normalizedSemester = user.semester != null ? user.semester.toString() : '';
+  return {
+    ...user,
+    branch: normalizedBranch,
+    course: normalizedBranch,
+    semester: normalizedSemester,
+  };
+};
+
 // Theme colors
 const THEMES = {
   dark: {
@@ -462,16 +474,10 @@ export default function App() {
               setSemester(storedSemester);
               setBranch(storedBranch);
             } else {
-              console.log('⚠️ No semester/branch found for student - using defaults');
-              // Set default values for students (can be customized based on your needs)
-              setSemester('1'); // Default to 1st semester
-              setBranch('B.Tech Computer Science'); // Default to Computer Science
+              console.log('⚠️ No semester/branch found for student - waiting for profile data');
             }
           } catch (error) {
             console.log('Error loading student data:', error);
-            // Set defaults on error
-            setSemester('1');
-            setBranch('B.Tech Computer Science');
           }
         };
         loadStudentData();
@@ -1359,7 +1365,7 @@ export default function App() {
       // Check for saved login data
       if (cachedUserData && cachedLoginId) {
         try {
-          const userData = JSON.parse(cachedUserData);
+          const userData = normalizeStudentUserData(JSON.parse(cachedUserData));
           setUserData(userData);
           setLoginId(cachedLoginId);
           setSelectedRole(userData.role);
@@ -1370,7 +1376,14 @@ export default function App() {
             // Use enrollmentNo as studentId for attendance tracking
             setStudentId(userData.enrollmentNo || userData._id);
             setSemester(userData.semester);
-            setBranch(userData.course);
+            setBranch(userData.branch);
+
+            if (userData.semester) {
+              AsyncStorage.setItem(SEMESTER_KEY, userData.semester).catch(() => {});
+            }
+            if (userData.branch) {
+              AsyncStorage.setItem(BRANCH_KEY, userData.branch).catch(() => {});
+            }
 
             // Check if face verification is still valid for today
             if (dailyVerification) {
@@ -1683,7 +1696,8 @@ export default function App() {
   const fetchTimetable = async (sem, br) => {
     try {
       console.log('🔄 Fetching timetable for:', sem, br);
-      const response = await fetch(`${SOCKET_URL}/api/timetable/${sem}/${br}?cacheBust=${Date.now()}`);
+      const branchParam = encodeURIComponent(br);
+      const response = await fetch(`${SOCKET_URL}/api/timetable/${sem}/${branchParam}?cacheBust=${Date.now()}`);
       console.log('✅ Response status:', response.status);
       const data = await response.json();
 
@@ -2491,37 +2505,42 @@ export default function App() {
         console.log('🔍 Login successful, user data:', data.user);
         console.log('📸 PhotoUrl:', data.user.photoUrl);
 
+        const normalizedUser = normalizeStudentUserData(data.user);
+
         // Update state first for instant UI feedback
-        setUserData(data.user);
-        setSelectedRole(data.user.role);
+        setUserData(normalizedUser);
+        setSelectedRole(normalizedUser.role);
         setLoggedInUserId(loginId.trim()); // Save the logged-in user ID
         setShowLogin(false);
 
         // Prepare storage data
         const storageData = [
-          [USER_DATA_KEY, JSON.stringify(data.user)],
+          [USER_DATA_KEY, JSON.stringify(normalizedUser)],
           [LOGIN_ID_KEY, loginId.trim()],
-          [ROLE_KEY, data.user.role]
+          [ROLE_KEY, normalizedUser.role]
         ];
 
-        if (data.user.role === 'student') {
-          setStudentName(data.user.name);
+        if (normalizedUser.role === 'student') {
+          setStudentName(normalizedUser.name);
           // Use enrollmentNo as studentId for attendance tracking
-          const studentIdValue = data.user.enrollmentNo || data.user._id;
+          const studentIdValue = normalizedUser.enrollmentNo || normalizedUser._id;
           setStudentId(studentIdValue);
-          setSemester(data.user.semester);
-          setBranch(data.user.course);
+          setSemester(normalizedUser.semester);
+          setBranch(normalizedUser.branch);
 
           // Fetch timetable for student
-          fetchTimetable(data.user.semester, data.user.course);
+          fetchTimetable(normalizedUser.semester, normalizedUser.branch);
 
           // Load today's attendance to restore attended minutes
           loadTodayAttendance(studentIdValue);
 
           storageData.push(
-            [STUDENT_NAME_KEY, data.user.name],
+            [STUDENT_NAME_KEY, normalizedUser.name],
             [STUDENT_ID_KEY, studentIdValue]
           );
+
+          if (normalizedUser.semester) storageData.push([SEMESTER_KEY, normalizedUser.semester]);
+          if (normalizedUser.branch) storageData.push([BRANCH_KEY, normalizedUser.branch]);
         } else if (data.user.role === 'teacher') {
           // Don't set default semester/branch for teachers - let current class detection handle it
           // setSemester(data.user.semester || '1');
@@ -2535,9 +2554,9 @@ export default function App() {
         });
 
         // Cache profile photo for face verification (students only)
-        if (data.user.role === 'student' && data.user.photoUrl) {
+        if (normalizedUser.role === 'student' && normalizedUser.photoUrl) {
           console.log('📥 Caching profile photo for face verification...');
-          cacheProfilePhoto(data.user.photoUrl, data.user._id).then(async (cachedPath) => {
+          cacheProfilePhoto(normalizedUser.photoUrl, normalizedUser._id).then(async (cachedPath) => {
             if (cachedPath) {
               console.log('✅ Photo cached successfully');
               setPhotoCached(true);

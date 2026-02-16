@@ -4294,6 +4294,7 @@ ture Details Styles */
     align-items: center;
     z-index: 10000;
     backdrop-filter: blur(4px);
+    pointer-events: auto;
 }
 
 .modal-content {
@@ -4304,6 +4305,9 @@ ture Details Styles */
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 10001;
+    pointer-events: auto;
 }
 
 .modal-header {
@@ -4375,6 +4379,7 @@ ture Details Styles */
     color: #fff;
     font-size: 14px;
     transition: all 0.2s;
+    pointer-events: auto;
 }
 
 .form-group input:focus,
@@ -4642,7 +4647,6 @@ ture Details Styles */
 .wifi-event-details {
     color: var(--text-secondary);
     margin-top: 2px;
-<<<<<<< HEAD
 }
 /* Enhanced Form Validation Styles */
 .form-group label {
@@ -5206,6 +5210,4 @@ ture Details Styles */
     .analytics-grid {
         grid-template-columns: 1fr;
     }
-=======
->>>>>>> origin/main
 }

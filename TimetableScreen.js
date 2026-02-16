@@ -243,7 +243,8 @@ export default function TimetableScreen({
           console.log(`📚 Found current class: ${currentClass.subject} - ${currentClass.branch} Sem ${currentClass.semester}`);
           
           // Fetch timetable for current class
-          const url = `${socketUrl}/api/timetable/${currentClass.semester}/${currentClass.branch}?t=${Date.now()}`;
+          const branchParam = encodeURIComponent(currentClass.branch);
+          const url = `${socketUrl}/api/timetable/${currentClass.semester}/${branchParam}?t=${Date.now()}`;
           console.log('Fetching current class timetable from:', url);
           
           const response = await fetch(url, {
@@ -265,7 +266,8 @@ export default function TimetableScreen({
         // If no current class, check if semester/branch are provided (manual selection)
         if (semester && branch) {
           console.log('📋 Using manual selection:', semester, branch);
-          const url = `${socketUrl}/api/timetable/${semester}/${branch}?t=${Date.now()}`;
+          const branchParam = encodeURIComponent(branch);
+          const url = `${socketUrl}/api/timetable/${semester}/${branchParam}?t=${Date.now()}`;
           console.log('Fetching manual timetable from:', url);
           
           const response = await fetch(url, {
@@ -306,7 +308,8 @@ export default function TimetableScreen({
     console.log('Fetching timetable for:', semester, branch);
     setLoading(true);
     try {
-      const url = `${socketUrl}/api/timetable/${semester}/${branch}?t=${Date.now()}`;
+      const branchParam = encodeURIComponent(branch);
+      const url = `${socketUrl}/api/timetable/${semester}/${branchParam}?t=${Date.now()}`;
       console.log('Fetching from:', url);
 
       const response = await fetch(url, {
@@ -352,7 +355,8 @@ export default function TimetableScreen({
 
     setSaving(true);
     try {
-      const response = await fetch(`${socketUrl}/api/timetable/${semester}/${branch}`, {
+      const branchParam = encodeURIComponent(branch);
+      const response = await fetch(`${socketUrl}/api/timetable/${semester}/${branchParam}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timetable: timetable.timetable })

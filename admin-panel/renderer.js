@@ -149,6 +149,18 @@ function generateSemesterOptions(selectedValue = '') {
 function populateFilterDropdowns() {
     console.log('🔄 Populating filter dropdowns...');
 
+    // Student Management filters
+    const semesterFilter = document.getElementById('semesterFilter');
+    if (semesterFilter) {
+        semesterFilter.innerHTML = '<option value="">All Semesters</option>' +
+            dynamicData.semesters.map(sem => `<option value="${sem}">Semester ${sem}</option>`).join('');
+    }
+
+    const courseFilter = document.getElementById('courseFilter');
+    if (courseFilter) {
+        courseFilter.innerHTML = '<option value="">All Courses</option>' + generateBranchOptions();
+    }
+
     // Timetable filters
     const timetableSemester = document.getElementById('timetableSemester');
     if (timetableSemester) {
@@ -572,8 +584,8 @@ function renderStudents(studentsToRender) {
             <td>${student.semester}</td>
             <td>${formatDate(student.dob)}</td>
             <td>
-                <button class="action-btn edit" onclick="editStudent('${student._id}')">Edit</button>
-                <button class="action-btn delete" onclick="deleteStudent('${student._id}')">Delete</button>
+                <button class="action-btn edit" onclick="editStudent('${student._id || student.enrollmentNo}')">Edit</button>
+                <button class="action-btn delete" onclick="deleteStudent('${student._id || student.enrollmentNo}')">Delete</button>
             </td>
         </tr>
     `}).join('');
@@ -582,14 +594,31 @@ function renderStudents(studentsToRender) {
 
 function filterStudents() {
     const search = document.getElementById('studentSearch').value.toLowerCase();
-    const semester = document.getElementById('semesterFilter').value;
-    const course = document.getElementById('courseFilter').value;
+    const semesterFilterEl = document.getElementById('semesterFilter');
+    const semesterValue = semesterFilterEl.value;
+
+    const courseFilterEl = document.getElementById('courseFilter');
+    const courseValue = courseFilterEl.value;
+    const courseLabel = courseFilterEl.selectedOptions?.[0]?.textContent || '';
+
+    const normalize = (value) => (value ?? '').toString().trim().toLowerCase();
+    const semesterValueNorm = normalize(semesterValue);
+    const courseValueNorm = normalize(courseValue);
+    const courseLabelNorm = normalize(courseLabel);
 
     const filtered = students.filter(student => {
         const matchesSearch = student.name.toLowerCase().includes(search) ||
             student.enrollmentNo.toLowerCase().includes(search);
-        const matchesSemester = !semester || student.semester === semester;
-        const matchesCourse = !course || student.branch === course;
+
+        const studentSemesterNorm = normalize(student.semester);
+        const studentBranchNorm = normalize(student.branch);
+
+        const matchesSemester = !semesterValueNorm || studentSemesterNorm === semesterValueNorm;
+        const matchesCourse =
+            !courseValueNorm ||
+            studentBranchNorm === courseValueNorm ||
+            studentBranchNorm === courseLabelNorm;
+
         return matchesSearch && matchesSemester && matchesCourse;
     });
 
@@ -761,6 +790,11 @@ async function handleAddStudent(e) {
     const formData = new FormData(e.target);
     const studentData = Object.fromEntries(formData);
 
+    if (studentData.course && !studentData.branch) {
+        studentData.branch = studentData.course;
+    }
+    delete studentData.course;
+
     // Upload photo to server if captured
     if (studentData.photoData) {
         try {
@@ -784,13 +818,11 @@ async function handleAddStudent(e) {
                 // Face not detected or other error
                 const errorMsg = photoResult.error || 'Photo upload failed';
                 console.error('❌ Photo upload failed:', errorMsg);
-                alert('Photo Upload Failed\n\n' + errorMsg + '\n\nPlease use a clear, well-lit photo showing your face.');
-                return; // Don't save student if photo validation failed
+                showNotification('Photo upload skipped: ' + errorMsg, 'error');
             }
         } catch (error) {
             console.error('Error uploading photo:', error);
-            alert('❌ Error uploading photo: ' + error.message);
-            return; // Don't save student if photo upload failed
+            showNotification('Photo upload skipped: ' + error.message, 'error');
         }
         delete studentData.photoData;
     }
@@ -807,7 +839,14 @@ async function handleAddStudent(e) {
             closeModal();
             loadStudents();
         } else {
-            showNotification('Failed to add student', 'error');
+            let errorMsg = 'Failed to add student';
+            try {
+                const err = await response.json();
+                errorMsg = err?.details || err?.error || err?.message || errorMsg;
+            } catch {
+                // ignore
+            }
+            showNotification(errorMsg, 'error');
         }
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
@@ -989,12 +1028,25 @@ async function loadDepartmentsFilter() {
 
 function filterTeachers() {
     const search = document.getElementById('teacherSearch').value.toLowerCase();
-    const department = document.getElementById('departmentFilter').value;
+    const departmentFilterEl = document.getElementById('departmentFilter');
+    const departmentValue = departmentFilterEl.value;
+    const departmentLabel = departmentFilterEl.selectedOptions?.[0]?.textContent || '';
+
+    const normalize = (value) => (value ?? '').toString().trim().toLowerCase();
+    const departmentValueNorm = normalize(departmentValue);
+    const departmentLabelNorm = normalize(departmentLabel);
 
     const filtered = teachers.filter(teacher => {
         const matchesSearch = teacher.name.toLowerCase().includes(search) ||
             teacher.employeeId.toLowerCase().includes(search);
-        const matchesDepartment = !department || teacher.department === department;
+
+        if (!departmentValueNorm) return matchesSearch;
+
+        const teacherDeptNorm = normalize(teacher.department);
+        const matchesDepartment =
+            teacherDeptNorm === departmentValueNorm ||
+            teacherDeptNorm === departmentLabelNorm;
+
         return matchesSearch && matchesDepartment;
     });
 
@@ -2901,8 +2953,11 @@ function setupThresholdSync() {
 async function deleteStudent(id) {
     if (!confirm('Are you sure you want to delete this student?')) return;
 
+    const student = students.find(s => s._id === id || s.enrollmentNo === id);
+    const identifier = student?._id || id;
+
     try {
-        const response = await fetch(`${SERVER_URL}/api/students/${id}`, { method: 'DELETE' });
+        const response = await fetch(`${SERVER_URL}/api/students/${identifier}`, { method: 'DELETE' });
         if (response.ok) {
             showNotification('Student deleted', 'success');
             loadStudents();
@@ -2943,7 +2998,7 @@ async function deleteClassroom(id) {
 
 // Edit functions
 async function editStudent(id) {
-    const student = students.find(s => s._id === id);
+    const student = students.find(s => s._id === id || s.enrollmentNo === id);
     if (!student) return;
 
     // Get current photo
@@ -3031,6 +3086,11 @@ async function editStudent(id) {
         const formData = new FormData(e.target);
         const studentData = Object.fromEntries(formData);
 
+        if (studentData.course && !studentData.branch) {
+            studentData.branch = studentData.course;
+        }
+        delete studentData.course;
+
         // Remove password if empty
         if (!studentData.password) {
             delete studentData.password;
@@ -3057,17 +3117,18 @@ async function editStudent(id) {
                 } else {
                     const errorMsg = photoResult.error || 'Photo upload failed';
                     console.error('❌ Photo upload failed:', errorMsg);
-                    alert('Photo Upload Failed\n\n' + errorMsg + '\n\nPlease use a clear, well-lit photo showing your face.');
-                    return;
+                    showNotification('Photo upload skipped: ' + errorMsg, 'error');
                 }
             } catch (error) {
                 console.error('Error uploading photo:', error);
+                showNotification('Photo upload skipped: ' + error.message, 'error');
             }
             delete studentData.photoData;
         }
 
         try {
-            const response = await fetch(`${SERVER_URL}/api/students/${id}`, {
+            const identifier = student._id || id;
+            const response = await fetch(`${SERVER_URL}/api/students/${identifier}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(studentData)
@@ -3078,7 +3139,14 @@ async function editStudent(id) {
                 closeModal();
                 loadStudents();
             } else {
-                showNotification('Failed to update student', 'error');
+                let errorMsg = 'Failed to update student';
+                try {
+                    const err = await response.json();
+                    errorMsg = err?.details || err?.error || err?.message || errorMsg;
+                } catch {
+                    // ignore
+                }
+                showNotification(errorMsg, 'error');
             }
         } catch (error) {
             showNotification('Error: ' + error.message, 'error');
@@ -5672,21 +5740,19 @@ async function loadPeriods() {
         // If no saved periods, try to fetch from any available timetable
         if (!periodsLoaded) {
             try {
-                // Try different semester/branch combinations to find any timetable
-                const testCombinations = [
-                    { semester: 3, branch: 'B.Tech Data Science' },
-                    { semester: 1, branch: 'B.Tech Computer Science' },
-                    { semester: 2, branch: 'B.Tech Data Science' }
-                ];
-
-                for (const combo of testCombinations) {
-                    const response = await fetch(`${SERVER_URL}/api/timetable/${combo.semester}/${encodeURIComponent(combo.branch)}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && data.timetable && data.timetable.periods && data.timetable.periods.length > 0) {
-                            currentPeriods = data.timetable.periods;
+                // Prefer currently loaded timetable periods (if any)
+                if (currentTimetable?.periods?.length > 0) {
+                    currentPeriods = currentTimetable.periods;
+                    periodsLoaded = true;
+                } else {
+                    // Otherwise, pull periods from the first available timetable on server
+                    const allRes = await fetch(`${SERVER_URL}/api/timetables`);
+                    if (allRes.ok) {
+                        const allData = await allRes.json();
+                        const first = allData?.timetables?.find(tt => tt?.periods?.length > 0);
+                        if (first?.periods?.length > 0) {
+                            currentPeriods = first.periods;
                             periodsLoaded = true;
-                            break;
                         }
                     }
                 }
@@ -5950,6 +6016,15 @@ async function savePeriodsConfig() {
         console.log('Response data:', data);
 
         if (response.ok && data.success) {
+            // Persist as local default so UI does not fall back to old hardcoded values
+            saveDefaultPeriods(currentPeriods);
+
+            // Keep currently loaded timetable (if any) in sync with new period config
+            if (currentTimetable) {
+                currentTimetable.periods = currentPeriods;
+                renderAdvancedTimetableEditor(currentTimetable);
+            }
+
             showNotification(`✅ Successfully updated ${data.updatedCount} timetables!`, 'success');
             loadPeriods(); // Reload to confirm
         } else {
