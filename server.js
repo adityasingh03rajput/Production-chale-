@@ -854,6 +854,28 @@ app.post('/api/periods/update-all', async (req, res) => {
     }
 });
 
+// Get current periods configuration
+app.get('/api/periods', async (req, res) => {
+    try {
+        if (mongoose.connection.readyState === 1) {
+            const tt = await Timetable.findOne({ periods: { $exists: true, $ne: [] } }).select('periods');
+            return res.json({
+                success: true,
+                periods: tt?.periods || []
+            });
+        }
+
+        const firstKey = Object.keys(timetableMemory).find(k => Array.isArray(timetableMemory[k]?.periods) && timetableMemory[k].periods.length > 0);
+        return res.json({
+            success: true,
+            periods: firstKey ? (timetableMemory[firstKey].periods || []) : []
+        });
+    } catch (error) {
+        console.error('❌ Error fetching periods:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ========================================
 // Subject Management APIs
 // ========================================
@@ -1080,11 +1102,11 @@ app.get('/api/teacher/current-class-students/:teacherId', async (req, res) => {
     try {
         const { teacherId } = req.params;
 
-        // Get current day and time
+        // Get current day and time in UTC (critical for proper class detection)
         const now = new Date();
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const currentDay = days[now.getDay()];
-        const currentTime = now.getHours() * 60 + now.getMinutes(); // minutes since midnight
+        const currentDay = days[now.getUTCDay()];
+        const currentTime = now.getUTCHours() * 60 + now.getUTCMinutes(); // minutes since midnight (UTC)
 
         console.log(`🔍 Finding current class for teacher: ${teacherId} at ${now.toLocaleTimeString()}`);
 

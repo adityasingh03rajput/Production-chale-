@@ -116,52 +116,46 @@ export default function TimetableScreen({
     }
   };
 
-  // Pre-defined subjects list
-  const SUBJECTS = [
-    'Data Structures',
-    'Database Management',
-    'Operating Systems',
-    'Computer Networks',
-    'Software Engineering',
-    'Web Development',
-    'Machine Learning',
-    'Artificial Intelligence',
-    'Programming in C',
-    'Programming in Java',
-    'Python Programming',
-    'Digital Electronics',
-    'Microprocessors',
-    'Signals & Systems',
-    'Control Systems',
-    'Thermodynamics',
-    'Fluid Mechanics',
-    'Structural Analysis',
-    'Surveying',
-    'Mathematics',
-    'Physics',
-    'Chemistry',
-    'English',
-    'Free Period',
-  ];
+  // Dynamic subjects list fetched from server
+  const [subjects, setSubjects] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [teachers, setTeachers] = useState([]);
 
-  // Pre-defined rooms list
-  const ROOMS = [
-    'Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105',
-    'Room 201', 'Room 202', 'Room 203', 'Room 204', 'Room 205',
-    'Room 301', 'Room 302', 'Room 303', 'Room 304', 'Room 305',
-    'Lab 1', 'Lab 2', 'Lab 3', 'Lab 4',
-    'Auditorium', 'Seminar Hall', 'Library',
-  ];
+  // Fetch subjects, rooms, and teachers from server
+  useEffect(() => {
+    const fetchConfigData = async () => {
+      try {
+        // Fetch subjects
+        const subjectsResponse = await fetch(`${socketUrl}/api/subjects`);
+        const subjectsData = await subjectsResponse.json();
+        if (subjectsData.success && subjectsData.subjects) {
+          setSubjects(subjectsData.subjects.map(s => s.name || s.subjectName));
+        }
 
-  // Teachers list (will be fetched from server)
-  const [teachers, setTeachers] = useState([
-    'Dr. Rajesh Kumar',
-    'Prof. Meera Singh',
-    'Dr. Sunil Patil',
-    'Prof. Anjali Desai',
-    'Dr. Amit Patel',
-    'Prof. Sunita Reddy',
-  ]);
+        // Fetch rooms (we'll use a default list for now since no API exists)
+        setRooms([
+          'Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105',
+          'Room 201', 'Room 202', 'Room 203', 'Room 204', 'Room 205',
+          'Room 301', 'Room 302', 'Room 303', 'Room 304', 'Room 305',
+          'Lab 1', 'Lab 2', 'Lab 3', 'Lab 4',
+          'Auditorium', 'Seminar Hall', 'Library',
+        ]);
+
+        // Fetch teachers
+        const teachersResponse = await fetch(`${socketUrl}/api/teachers`);
+        const teachersData = await teachersResponse.json();
+        if (teachersData.success && teachersData.teachers) {
+          setTeachers(teachersData.teachers.map(t => t.name));
+        }
+      } catch (error) {
+        console.log('Error fetching config data:', error);
+      }
+    };
+
+    if (socketUrl) {
+      fetchConfigData();
+    }
+  }, [socketUrl]);
 
   // Get days dynamically from timetable in proper week order (recalculates when timetable changes)
   const DAYS = useMemo(() => {
@@ -992,7 +986,7 @@ export default function TimetableScreen({
                   borderRadius: 8,
                   marginTop: 4,
                 }}>
-                  {SUBJECTS.map((subject, index) => (
+                  {subjects.map((subject, index) => (
                     <TouchableOpacity
                       key={index}
                       onPress={() => {
@@ -1001,7 +995,7 @@ export default function TimetableScreen({
                       }}
                       style={{
                         padding: 12,
-                        borderBottomWidth: index < SUBJECTS.length - 1 ? 1 : 0,
+                        borderBottomWidth: index < subjects.length - 1 ? 1 : 0,
                         borderBottomColor: theme.border,
                       }}
                     >
@@ -1062,7 +1056,7 @@ export default function TimetableScreen({
                   borderRadius: 8,
                   marginTop: 4,
                 }}>
-                  {ROOMS.map((room, index) => (
+                  {rooms.map((room, index) => (
                     <TouchableOpacity
                       key={index}
                       onPress={() => {
@@ -1071,7 +1065,7 @@ export default function TimetableScreen({
                       }}
                       style={{
                         padding: 12,
-                        borderBottomWidth: index < ROOMS.length - 1 ? 1 : 0,
+                        borderBottomWidth: index < rooms.length - 1 ? 1 : 0,
                         borderBottomColor: theme.border,
                       }}
                     >

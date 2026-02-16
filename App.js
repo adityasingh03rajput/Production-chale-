@@ -496,6 +496,14 @@ export default function App() {
     }
   }, [semester, branch, selectedRole, showLogin]);
 
+  // Fetch timetable for teachers when semester/branch are available
+  useEffect(() => {
+    if (selectedRole === 'teacher' && semester && branch && !showLogin) {
+      console.log('👨‍🏫 Teacher - Semester/branch available, fetching timetable:', semester, branch);
+      fetchTimetable(semester, branch);
+    }
+  }, [semester, branch, selectedRole, showLogin]);
+
   // Force refetch if current day is missing from timetable (handles old timetables without Sunday)
   useEffect(() => {
     if (timetable?.schedule && currentDay) {
@@ -1020,8 +1028,8 @@ export default function App() {
     });
 
     // Listen for Random Ring notifications (students only)
-    socketRef.current.on('random_ring_notification', (data) => {
-      console.log('🔔 Random Ring notification received:', data);
+    socketRef.current.on('random_ring', (data) => {
+      console.log('🔔 Random ring received:', data);
       console.log('   Current role:', selectedRole);
       console.log('   Current studentId:', studentId);
       console.log('   Notification for:', data.studentId, data.enrollmentNo);
@@ -1047,10 +1055,6 @@ export default function App() {
 
         // Show alert to student
         alert(`🔔 Random Ring!\n\n⏸️  Your timer has been PAUSED.\n\nVerify your presence to resume!`);
-
-        // Auto-trigger face verification
-        console.log('📸 Auto-opening face verification for random ring');
-        setShowFaceVerification(true);
 
         // Set 5-minute timeout for verification
         setTimeout(() => {
@@ -1093,8 +1097,6 @@ export default function App() {
           isRejection: true
         });
 
-        // Auto-open face verification
-        setShowFaceVerification(true);
       }
     });
 
@@ -2176,19 +2178,8 @@ export default function App() {
       }
     }
 
-    // 2. Check face verification
-    console.log('🔒 Step 2: Checking face verification...');
-    if (!verifiedToday) {
-      console.log('🔒 Face verification required to start attendance');
-      alert('🔒 Face verification required!\n\nPlease complete biometric verification to start attendance.');
-      setShowFaceVerification(true);
-      return;
-    }
-
-    // 3. Both WiFi and face verification passed - start timer
     console.log('✅ All validations passed - Starting timer');
     console.log('   ✅ WiFi: Connected to classroom network');
-    console.log('   ✅ Face: Verified today');
     console.log('   ✅ Class: Active lecture in progress');
 
     setIsRunning(true);
@@ -4372,67 +4363,7 @@ export default function App() {
                 isRunning={isRunning}
                 onToggleTimer={handleStartPause}
                 onReset={handleReset}
-                onLongPressCenter={async () => {
-                  console.log('🎯 Play button tapped - starting BSSID validation and permission check');
-
-                  try {
-                    // Step 1: Check and request permissions FIRST
-                    console.log('🔐 Step 1: Checking location permissions...');
-
-                    if (Platform.OS === 'android') {
-                      const fineLocationGranted = await PermissionsAndroid.check('android.permission.ACCESS_FINE_LOCATION');
-                      const coarseLocationGranted = await PermissionsAndroid.check('android.permission.ACCESS_COARSE_LOCATION');
-
-                      if (!fineLocationGranted && !coarseLocationGranted) {
-                        console.log('🔐 Location permission not granted - requesting...');
-
-                        // Request fine location permission with explanation
-                        const granted = await PermissionsAndroid.request(
-                          'android.permission.ACCESS_FINE_LOCATION',
-                          {
-                            title: 'Location Permission Required',
-                            message: 'This app needs location permission to detect WiFi network details (BSSID) for attendance verification.\n\nThis is required by Android for security reasons.\n\nNo location data is collected or stored.',
-                            buttonNeutral: 'Ask Me Later',
-                            buttonNegative: 'Cancel',
-                            buttonPositive: 'OK',
-                          }
-                        );
-
-                        if (granted !== 'granted') {
-                          console.log('❌ Location permission denied');
-                          alert('Location permission is required for WiFi-based attendance verification. Please grant permission in device settings.');
-                          return;
-                        }
-
-                        console.log('✅ Location permission granted');
-                      } else {
-                        console.log('✅ Location permission already granted');
-                      }
-                    }
-
-                    // Step 2: Proceed with face verification logic
-                    console.log('🔐 Step 2: Proceeding with face verification...');
-
-                    // NEW LOGIC: Face verification behavior based on attendance status
-                    if (randomRingData) {
-                      // Random Ring active - allow face verification
-                      console.log('🔔 Random Ring active - opening face verification');
-                      setShowFaceVerification(true);
-                    } else if (isRunning) {
-                      // Student is attending - only Random Ring can trigger verification
-                      console.log('⚠️ Already attending - face verification only available during Random Ring');
-                      alert('Face verification is only available during Random Ring when you are attending class.');
-                    } else {
-                      // Student NOT attending - allow face verification to start attendance
-                      console.log('🔒 Not attending - opening face verification to start attendance');
-                      setShowFaceVerification(true);
-                    }
-
-                  } catch (error) {
-                    console.error('❌ Error in play button handler:', error);
-                    alert(`Error: ${error.message}`);
-                  }
-                }}
+                onLongPressCenter={() => {}}
                 formatTime={formatTime}
                 timetable={timetable}
                 currentDay={currentDay}

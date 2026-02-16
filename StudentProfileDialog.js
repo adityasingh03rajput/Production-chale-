@@ -108,6 +108,26 @@ const StudentProfileDialog = ({ visible, onClose, theme, student }) => {
                 </Text>
               </View>
 
+              {/* Branch */}
+              <View style={styles.infoItem}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                  Branch
+                </Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {student.branch || student.course || 'N/A'}
+                </Text>
+              </View>
+
+              {/* Semester */}
+              <View style={styles.infoItem}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                  Semester
+                </Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {student.semester || 'N/A'}
+                </Text>
+              </View>
+
               {/* Attendance Percentage */}
               <View style={styles.infoItem}>
                 <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
